@@ -145,28 +145,28 @@ void run(void *arg)
 			old = __atomic_load_n(&flag, __ATOMIC_RELAXED);
 			do {
 				loops++;
-			} while (!__atomic_compare_exchange_n(&flag, &old, old ^ bit, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED) &&
+			} while (!__atomic_compare_exchange_n(&flag, &old, old + 1, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED) &&
 				 ({ cpu_relax(); __atomic_compare_exchange_n(&flag, &old, old, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED); 1; }));
 		} else if (arg_relax == 2) {
 			/* reload old just before the operation */
 			do {
 				old = __atomic_load_n(&flag, __ATOMIC_RELAXED);
 				loops++;
-			} while (!__atomic_compare_exchange_n(&flag, &old, old ^ bit, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED) &&
+			} while (!__atomic_compare_exchange_n(&flag, &old, old + 1, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED) &&
 				 cpu_relax());
 		} else if (arg_relax == 1) {
 			/* reuse previous value after relax */
 			old = __atomic_load_n(&flag, __ATOMIC_RELAXED);
 			do {
 				loops++;
-			} while (!__atomic_compare_exchange_n(&flag, &old, old ^ bit, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED) &&
+			} while (!__atomic_compare_exchange_n(&flag, &old, old + 1, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED) &&
 				 cpu_relax());
 		} else {
 			/* no relax */
 			old = __atomic_load_n(&flag, __ATOMIC_RELAXED);
 			do {
 				loops++;
-			} while (!__atomic_compare_exchange_n(&flag, &old, old ^ bit, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED));
+			} while (!__atomic_compare_exchange_n(&flag, &old, old + 1, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED));
 		}
 		stats[tid].done++;
 		stats[tid].loops += loops;
@@ -174,7 +174,7 @@ void run(void *arg)
 			stats[tid].max = loops;
 	}
 
-	fprintf(stderr, "thread %d quitting\n", tid);
+	fprintf(stderr, "thread %2d quitting after %8lu loops (%8lu max wait)\n", tid, stats[tid].done, stats[tid].max);
 
 	/* step 3 : stop */
 	__sync_fetch_and_sub(&actthreads, 1);
