@@ -33,6 +33,7 @@ static cpu_set_t cpu_mask;
  * as often as possible.
  */
 static unsigned long flag __attribute__((aligned(64)));
+static unsigned long runner __attribute__((aligned(64)));
 
 /* per-thread stats */
 static struct {
@@ -104,7 +105,7 @@ void run(void *arg)
 {
 	int tid = (long)arg;
 	int next = (tid + 1) % nbthreads;
-	unsigned int loops = 0;
+	unsigned long loops = 0;
 	unsigned long bit = 1UL << tid;
 	int i, cnt;
 
@@ -139,13 +140,12 @@ void run(void *arg)
 	/* step 2 : run */
 	/* load/store */
 	while (1) {
-		while (!__atomic_load_n(&stats[tid].ready, __ATOMIC_ACQUIRE) && step == 2)
+		while (__atomic_load_n(&runner, __ATOMIC_ACQUIRE) != tid && step == 2)
 			;
 		if (step != 2)
 			break;
-		__atomic_store_n(&stats[tid].ready, 0, __ATOMIC_RELAXED);
 		loops++;
-		__atomic_store_n(&stats[next].ready, 1, __ATOMIC_RELEASE);
+		__atomic_store_n(&runner, next, __ATOMIC_RELEASE);
 	}
 
 	fprintf(stderr, "thread %2d quitting after %lu loops\n", tid, loops);
