@@ -37,6 +37,7 @@ static unsigned long flag __attribute__((aligned(64)));
 /* per-thread stats */
 static struct {
 	unsigned long ready;
+	unsigned long done;
 } stats[MAXTHREADS] __attribute__((aligned(64)));
 
 pthread_t thr[MAXTHREADS];
@@ -103,7 +104,7 @@ void run(void *arg)
 {
 	int tid = (long)arg;
 	int next = (tid + 1) % nbthreads;
-	unsigned int loops;
+	unsigned int loops = 0;
 	unsigned long bit = 1UL << tid;
 	int i, cnt;
 
@@ -142,13 +143,13 @@ void run(void *arg)
 			;
 		if (step != 2)
 			break;
-		__atomic_store_n(&stats[tid].ready, 0, __ATOMIC_RELEASE/*RELAXED*/);
-		total++;
-		//__atomic_fetch_add(&total, 1, __ATOMIC_RELAXED);
+		__atomic_store_n(&stats[tid].ready, 0, __ATOMIC_RELAXED);
+		loops++;
 		__atomic_store_n(&stats[next].ready, 1, __ATOMIC_RELEASE);
 	}
 
-	fprintf(stderr, "thread %d quitting\n", tid);
+	fprintf(stderr, "thread %2d quitting after %lu loops\n", tid, loops);
+	stats[tid].done = loops;
 
 	/* step 3 : stop */
 	__sync_fetch_and_sub(&actthreads, 1);
@@ -236,6 +237,7 @@ int main(int argc, char **argv)
 	done = loops = min = max = 0;
 	for (u = 0; u < nbthreads; u++) {
 		pthread_join(thr[u], NULL);
+		done += stats[u].done;
 	}
 
 	gettimeofday(&stop, NULL);
@@ -246,6 +248,7 @@ int main(int argc, char **argv)
 		start.tv_sec++;
 	}
 
+	total = done;
 	i = i / 1000 + (int)(stop.tv_sec - start.tv_sec) * 1000;
 	printf("threads: %d done: %lu time(ms): %u rate: %lld/s ns: %lld\n",
 	       nbthreads, total, i, total * 1000ULL / (unsigned)i, (unsigned)i * 1000000ULL / total);
