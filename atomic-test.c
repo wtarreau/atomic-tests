@@ -23,7 +23,7 @@
 
 #define MAXTHREADS	64
 
-static volatile unsigned int step;
+static volatile unsigned int step __attribute__((aligned(64)));
 static struct timeval start, stop;
 static volatile unsigned int actthreads;
 
@@ -36,16 +36,15 @@ static unsigned long flag __attribute__((aligned(64)));
 
 /* per-thread stats */
 static struct {
-	unsigned long done;
-	unsigned long loops;
-	unsigned long max;
-	unsigned long tot;
+	unsigned long ready;
 } stats[MAXTHREADS] __attribute__((aligned(64)));
 
 pthread_t thr[MAXTHREADS];
 unsigned int nbthreads;
 unsigned int arg_run = 1;
 unsigned int arg_relax = 0;
+
+volatile static unsigned long total __attribute__((aligned(64))) = 0;
 
 #if defined(__x86_64__)
 #define cpu_relax() ({ asm volatile("rep;nop\n"); 1; })
@@ -103,9 +102,9 @@ unsigned int rnd32range(unsigned int range)
 void run(void *arg)
 {
 	int tid = (long)arg;
+	int next = (tid + 1) % nbthreads;
 	unsigned int loops;
 	unsigned long bit = 1UL << tid;
-	unsigned long old;
 	int i, cnt;
 
 	/* look for the Nth CPU bound in the process' mask and use this one to
@@ -137,44 +136,19 @@ void run(void *arg)
 		;
 
 	/* step 2 : run */
-	while (step == 2) {
-		loops = 0;
-
-		if (arg_relax == 3) {
-			/* reload old using a write cycle just before the operation */
-			old = __atomic_load_n(&flag, __ATOMIC_RELAXED);
-			do {
-				loops++;
-			} while (!__atomic_compare_exchange_n(&flag, &old, old + 1, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED) &&
-				 ({ cpu_relax(); __atomic_compare_exchange_n(&flag, &old, old, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED); 1; }));
-		} else if (arg_relax == 2) {
-			/* reload old just before the operation */
-			do {
-				old = __atomic_load_n(&flag, __ATOMIC_RELAXED);
-				loops++;
-			} while (!__atomic_compare_exchange_n(&flag, &old, old + 1, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED) &&
-				 cpu_relax());
-		} else if (arg_relax == 1) {
-			/* reuse previous value after relax */
-			old = __atomic_load_n(&flag, __ATOMIC_RELAXED);
-			do {
-				loops++;
-			} while (!__atomic_compare_exchange_n(&flag, &old, old + 1, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED) &&
-				 cpu_relax());
-		} else {
-			/* no relax */
-			old = __atomic_load_n(&flag, __ATOMIC_RELAXED);
-			do {
-				loops++;
-			} while (!__atomic_compare_exchange_n(&flag, &old, old + 1, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED));
-		}
-		stats[tid].done++;
-		stats[tid].loops += loops;
-		if (loops > stats[tid].max)
-			stats[tid].max = loops;
+	/* load/store */
+	while (1) {
+		while (!__atomic_load_n(&stats[tid].ready, __ATOMIC_ACQUIRE) && step == 2)
+			;
+		if (step != 2)
+			break;
+		__atomic_store_n(&stats[tid].ready, 0, __ATOMIC_RELEASE/*RELAXED*/);
+		total++;
+		//__atomic_fetch_add(&total, 1, __ATOMIC_RELAXED);
+		__atomic_store_n(&stats[next].ready, 1, __ATOMIC_RELEASE);
 	}
 
-	fprintf(stderr, "thread %2d quitting after %8lu loops (%8lu max wait)\n", tid, stats[tid].done, stats[tid].max);
+	fprintf(stderr, "thread %d quitting\n", tid);
 
 	/* step 3 : stop */
 	__sync_fetch_and_sub(&actthreads, 1);
@@ -247,35 +221,21 @@ int main(int argc, char **argv)
 
 	__sync_fetch_and_add(&step, 1);  /* let the threads warm up and get ready to start */
 
-	while (actthreads != nbthreads);
+	while (actthreads != nbthreads)
+		;
 
 	signal(SIGALRM, alarm_handler);
 	alarm(arg_run);
 
 	gettimeofday(&start, NULL);
 	__sync_fetch_and_add(&step, 1); /* fire ! */
+	__atomic_add_fetch(&stats[0].ready, 1, __ATOMIC_RELEASE);
 
 	/* and wait for all threads to die */
 
 	done = loops = min = max = 0;
 	for (u = 0; u < nbthreads; u++) {
 		pthread_join(thr[u], NULL);
-		done += stats[u].done;
-		if (!u || stats[u].done > done_max)
-			done_max = stats[u].done;
-		if (!u || stats[u].done < done_min)
-			done_min = stats[u].done;
-
-		loops += stats[u].loops;
-		if (!u || stats[u].loops > loops_max)
-			loops_max = stats[u].loops;
-		if (!u || stats[u].loops < loops_min)
-			loops_min = stats[u].loops;
-
-		if (!u || stats[u].max > max)
-			max = stats[u].max;
-		if (!u || stats[u].max < min)
-			min = stats[u].max;
 	}
 
 	gettimeofday(&stop, NULL);
@@ -285,9 +245,10 @@ int main(int argc, char **argv)
 		i += 1000000;
 		start.tv_sec++;
 	}
+
 	i = i / 1000 + (int)(stop.tv_sec - start.tv_sec) * 1000;
-	printf("threads: %d done: %lu (%lu..%lu) loops: %lu (%lu..%lu) max:%lu..%lu time(ms): %u rate: %Ld/s\n",
-	       nbthreads, done, done_min, done_max, loops, loops_min, loops_max, min, max, i, done * 1000ULL / (unsigned)i);
+	printf("threads: %d done: %lu time(ms): %u rate: %lld/s ns: %lld\n",
+	       nbthreads, total, i, total * 1000ULL / (unsigned)i, (unsigned)i * 1000000ULL / total);
 
 	/* All the work has ended */
 
