@@ -127,15 +127,26 @@ void run(void *arg)
 		;
 
 	/* step 2 : run */
-	/* load/store */
-	do {
+	if (arg_relax == 0) {
+		/* no CPU relax in the loop */
 		do {
-			old = tid; // only leave when another thread placed our ID there
-		} while (!__atomic_compare_exchange_n(&runners[tid & tgmask].tid, &old, -1, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED) && ({ cpu_relax(); 1; }));
-
-		loops++;
-		__atomic_store_n(&runners[next & tgmask].tid, next, __ATOMIC_RELEASE);
-	} while (step == 2);
+			do {
+				old = tid; // only leave when another thread placed our ID there
+			} while (!__atomic_compare_exchange_n(&runners[tid & tgmask].tid, &old, -1, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED));
+			loops++;
+			__atomic_store_n(&runners[next & tgmask].tid, next, __ATOMIC_RELEASE);
+		} while (step == 2);
+	}
+	else if (arg_relax == 1) {
+		/* CPU relax in the loop */
+		do {
+			do {
+				old = tid; // only leave when another thread placed our ID there
+			} while (!__atomic_compare_exchange_n(&runners[tid & tgmask].tid, &old, -1, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED) && ({ cpu_relax(); 1; }));
+			loops++;
+			__atomic_store_n(&runners[next & tgmask].tid, next, __ATOMIC_RELEASE);
+		} while (step == 2);
+	}
 
 	fprintf(stderr, "thread %2d quitting after %lu loops\n", tid, loops);
 	stats[tid].done = loops;
