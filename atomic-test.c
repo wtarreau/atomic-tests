@@ -52,7 +52,8 @@ unsigned long arg_tgmask = 0UL;
 volatile static unsigned long total __attribute__((aligned(64))) = 0;
 
 #if defined(__x86_64__)
-#define cpu_relax() ({ asm volatile("rep;nop\n"); 1; })
+//#define cpu_relax() ({ asm volatile("rep;nop\n"); 1; })
+#define cpu_relax() ({ asm volatile("xchg %rax,%rdx; xchg %rax,%rdx;xchg %rax,%rdx; xchg %rax,%rdx\n"); 1; })
 #elif defined(__aarch64__)
 #define cpu_relax() ({ asm volatile("isb" ::: "memory"); 1; })
 #endif
