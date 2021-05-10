@@ -10,6 +10,7 @@
 
 #define _GNU_SOURCE // for sched + cpu_set
 #include <sys/time.h>
+#include <ctype.h>
 #include <errno.h>
 #include <malloc.h>
 #include <pthread.h>
@@ -28,6 +29,7 @@ static struct timeval start, stop;
 static volatile unsigned int actthreads;
 
 static cpu_set_t cpu_mask;
+static cpu_set_t aff[MAXTHREADS];
 
 /* the flag array all threads compete on. Each one tries to flip its own bit
  * as often as possible.
@@ -107,24 +109,8 @@ void run(void *arg)
 	int next = (tid + 1) % nbthreads;
 	unsigned long loops = 0;
 	unsigned long bit = 1UL << tid;
-	int i, cnt;
 
-	/* look for the Nth CPU bound in the process' mask and use this one to
-	 * bind the current thread.
-	 */
-	for (i = cnt = 0; i < CPU_SETSIZE; i++) {
-		if (CPU_ISSET(i, &cpu_mask)) {
-			if (cnt == tid) {
-				cpu_set_t thread_mask;
-
-				CPU_ZERO(&thread_mask);
-				CPU_SET(i, &thread_mask);
-				sched_setaffinity(0, sizeof(thread_mask), &thread_mask);
-				break;
-			}
-			cnt++;
-		}
-	}
+	sched_setaffinity(0, sizeof(aff[tid]), &aff[tid]);
 
 	/* step 0: create all threads */
 	while (step == 0) {
@@ -165,18 +151,29 @@ void alarm_handler(int sig)
 
 void usage(int ret)
 {
-	die(ret, "usage: stress [-h] [-t threads] [ -r relax ] [-d run_time]\n");
+	die(ret, "usage: stress [-h] [-t threads] [ -r relax ] [-d run_time] [thr:cpu]*\n");
 }
 
 int main(int argc, char **argv)
 {
-	int i, err;
+	int i, err, cnt;
 	unsigned int u;
 	unsigned long done, done_min, done_max;
 	unsigned long loops, loops_min, loops_max;
 	unsigned long min, max;
 
 	sched_getaffinity(0, sizeof(cpu_mask), &cpu_mask);
+
+	/* look for the Nth CPU bound in the process' mask and use this one to
+	 * bind the current thread.
+	 */
+	for (i = cnt = 0; i < CPU_SETSIZE; i++) {
+		if (cnt < MAXTHREADS && CPU_ISSET(i, &cpu_mask)) {
+			CPU_ZERO(&aff[cnt]);
+			CPU_SET(i, &aff[cnt]);
+			cnt++;
+		}
+	}
 
 	nbthreads = CPU_COUNT(&cpu_mask);
 
@@ -199,6 +196,21 @@ int main(int argc, char **argv)
 		}
 		else if (!strcmp(*argv, "-h"))
 			usage(0);
+		else if (isdigit((unsigned char)**argv)) {
+			unsigned int thr, cpu;
+			char *sep = strchr(*argv, ':');
+			if (!sep)
+				usage(1);
+			sep++;
+			thr = atoi(*argv);
+			cpu = atoi(sep);
+			if (thr < MAXTHREADS && cpu < CPU_SETSIZE) {
+				CPU_ZERO(&aff[thr]);
+				CPU_SET(cpu, &aff[thr]);
+			}
+			else
+				usage(1);
+		}
 		else
 			usage(1);
 		argc--; argv++;
