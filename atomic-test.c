@@ -111,6 +111,7 @@ void run(void *arg)
 	unsigned long loops = 0;
 	const unsigned long bit = 1UL << tid;
 	const unsigned long tgmask = ~arg_tgmask;
+	unsigned long old;
 
 	sched_setaffinity(0, sizeof(aff[tid]), &aff[tid]);
 
@@ -128,9 +129,10 @@ void run(void *arg)
 	/* step 2 : run */
 	/* load/store */
 	do {
-		while (__atomic_load_n(&runners[tid & tgmask].tid, __ATOMIC_ACQUIRE) != tid)
-			cpu_relax();
-		__atomic_store_n(&runners[tid & tgmask].tid, -1, __ATOMIC_RELAXED);
+		do {
+			old = tid; // only leave when another thread placed our ID there
+		} while (!__atomic_compare_exchange_n(&runners[tid & tgmask].tid, &old, -1, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED) && ({ cpu_relax(); 1; }));
+
 		loops++;
 		__atomic_store_n(&runners[next & tgmask].tid, next, __ATOMIC_RELEASE);
 	} while (step == 2);
