@@ -47,6 +47,7 @@ pthread_t thr[MAXTHREADS];
 unsigned int nbthreads;
 unsigned int arg_run = 1;
 unsigned int arg_relax = 0;
+unsigned long arg_tgmask = 0UL;
 
 volatile static unsigned long total __attribute__((aligned(64))) = 0;
 
@@ -105,10 +106,11 @@ unsigned int rnd32range(unsigned int range)
 
 void run(void *arg)
 {
-	int tid = (long)arg;
-	int next = (tid + 1) % nbthreads;
+	const int tid = (long)arg;
+	const int next = (tid + 1) % nbthreads;
 	unsigned long loops = 0;
-	unsigned long bit = 1UL << tid;
+	const unsigned long bit = 1UL << tid;
+	const unsigned long tgmask = ~arg_tgmask;
 
 	sched_setaffinity(0, sizeof(aff[tid]), &aff[tid]);
 
@@ -126,11 +128,11 @@ void run(void *arg)
 	/* step 2 : run */
 	/* load/store */
 	do {
-		while (__atomic_load_n(&runners[tid & ~1].tid, __ATOMIC_ACQUIRE) != tid)
+		while (__atomic_load_n(&runners[tid & tgmask].tid, __ATOMIC_ACQUIRE) != tid)
 			cpu_relax();
-		__atomic_store_n(&runners[tid & ~1].tid, -1, __ATOMIC_RELAXED);
+		__atomic_store_n(&runners[tid & tgmask].tid, -1, __ATOMIC_RELAXED);
 		loops++;
-		__atomic_store_n(&runners[next & ~1].tid, next, __ATOMIC_RELEASE);
+		__atomic_store_n(&runners[next & tgmask].tid, next, __ATOMIC_RELEASE);
 	} while (step == 2);
 
 	fprintf(stderr, "thread %2d quitting after %lu loops\n", tid, loops);
@@ -150,7 +152,7 @@ void alarm_handler(int sig)
 
 void usage(int ret)
 {
-	die(ret, "usage: stress [-h] [-t threads] [ -r relax ] [-d run_time] [thr:cpu]*\n");
+	die(ret, "usage: stress [-h] [-t threads] [-g tgmask] [ -r relax ] [-d run_time] [thr:cpu]*\n");
 }
 
 int main(int argc, char **argv)
@@ -182,6 +184,12 @@ int main(int argc, char **argv)
 			if (--argc < 0)
 				usage(1);
 			nbthreads = atol(*++argv);
+		}
+		else if (!strcmp(*argv, "-g")) {
+			/* thread group mask */
+			if (--argc < 0)
+				usage(1);
+			arg_tgmask = atol(*++argv);
 		}
 		else if (!strcmp(*argv, "-d")) {
 			if (--argc < 0)
