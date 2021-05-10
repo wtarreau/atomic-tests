@@ -147,6 +147,24 @@ void run(void *arg)
 			__atomic_store_n(&runners[next & tgmask].tid, next, __ATOMIC_RELEASE);
 		} while (step == 2);
 	}
+	else if (arg_relax == 2) {
+		/* no CPU relax in the loop, use xchg */
+		do {
+			while (__atomic_exchange_n(&runners[tid & tgmask].tid, -1, __ATOMIC_RELAXED) != tid)
+				;
+			loops++;
+			__atomic_store_n(&runners[next & tgmask].tid, next, __ATOMIC_RELEASE);
+		} while (step == 2);
+	}
+	else if (arg_relax == 3) {
+		/* CPU relax in the loop, use xchg */
+		do {
+			while (__atomic_exchange_n(&runners[tid & tgmask].tid, -1, __ATOMIC_RELAXED) != tid)
+				cpu_relax();
+			loops++;
+			__atomic_store_n(&runners[next & tgmask].tid, next, __ATOMIC_RELEASE);
+		} while (step == 2);
+	}
 
 	fprintf(stderr, "thread %2d quitting after %lu loops\n", tid, loops);
 	stats[tid].done = loops;
