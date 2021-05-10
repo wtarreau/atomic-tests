@@ -125,15 +125,13 @@ void run(void *arg)
 
 	/* step 2 : run */
 	/* load/store */
-	while (1) {
-		while (__atomic_load_n(&runners[tid & ~1].tid, __ATOMIC_ACQUIRE) != tid && step == 2)
+	do {
+		while (__atomic_load_n(&runners[tid & ~1].tid, __ATOMIC_ACQUIRE) != tid)
 			cpu_relax();
 		__atomic_store_n(&runners[tid & ~1].tid, -1, __ATOMIC_RELAXED);
-		if (step != 2)
-			break;
 		loops++;
 		__atomic_store_n(&runners[next & ~1].tid, next, __ATOMIC_RELEASE);
-	}
+	} while (step == 2);
 
 	fprintf(stderr, "thread %2d quitting after %lu loops\n", tid, loops);
 	stats[tid].done = loops;
