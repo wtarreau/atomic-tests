@@ -127,7 +127,7 @@ void run(void *arg)
 	/* load/store */
 	while (1) {
 		while (__atomic_load_n(&runner, __ATOMIC_ACQUIRE) != tid && step == 2)
-			;
+			cpu_relax();
 		if (step != 2)
 			break;
 		loops++;
