@@ -35,7 +35,7 @@ static cpu_set_t aff[MAXTHREADS];
  * as often as possible.
  */
 static unsigned long flag __attribute__((aligned(64)));
-static unsigned long runner __attribute__((aligned(64)));
+static struct { unsigned long tid __attribute__((aligned(64))); } runners[MAXTHREADS];
 
 /* per-thread stats */
 static struct {
@@ -126,12 +126,13 @@ void run(void *arg)
 	/* step 2 : run */
 	/* load/store */
 	while (1) {
-		while (__atomic_load_n(&runner, __ATOMIC_ACQUIRE) != tid && step == 2)
+		while (__atomic_load_n(&runners[tid & ~1].tid, __ATOMIC_ACQUIRE) != tid && step == 2)
 			cpu_relax();
+		__atomic_store_n(&runners[tid & ~1].tid, -1, __ATOMIC_RELAXED);
 		if (step != 2)
 			break;
 		loops++;
-		__atomic_store_n(&runner, next, __ATOMIC_RELEASE);
+		__atomic_store_n(&runners[next & ~1].tid, next, __ATOMIC_RELEASE);
 	}
 
 	fprintf(stderr, "thread %2d quitting after %lu loops\n", tid, loops);
