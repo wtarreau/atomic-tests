@@ -55,7 +55,7 @@ volatile static unsigned long total __attribute__((aligned(64))) = 0;
 //#define cpu_relax() ({ asm volatile("rep;nop\n"); 1; })
 #define cpu_relax() ({ asm volatile("xchg %rax,%rdx; xchg %rax,%rdx;xchg %rax,%rdx; xchg %rax,%rdx\n"); 1; })
 #elif defined(__aarch64__)
-#define cpu_relax() ({ asm volatile("isb" ::: "memory"); 1; })
+#define cpu_relax() ({ asm volatile("isb"); 1; })
 #endif
 
 /* display the message and exit with the code */
