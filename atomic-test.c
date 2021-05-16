@@ -56,6 +56,9 @@ volatile static unsigned long total __attribute__((aligned(64))) = 0;
 #define cpu_relax() ({ asm volatile("xchg %rax,%rdx; xchg %rax,%rdx;xchg %rax,%rdx; xchg %rax,%rdx\n"); 1; })
 #elif defined(__aarch64__)
 #define cpu_relax() ({ asm volatile("isb"); 1; })
+#else
+#warning "No cpu_relax() implemented on this platform"
+#define cpu_relax() do { } while (0)
 #endif
 
 /* display the message and exit with the code */
