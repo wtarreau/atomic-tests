@@ -169,6 +169,48 @@ void run(void *arg)
 			__atomic_store_n(&runners[next & tgmask].tid, next, __ATOMIC_RELEASE);
 		} while (step == 2);
 	}
+	else if (arg_relax == 4) {
+		/* no CPU relax in the loop, use load+store */
+		do {
+			while (__atomic_load_n(&runners[tid & tgmask].tid, __ATOMIC_ACQUIRE) != tid)
+				;
+			loops++;
+			__atomic_store_n(&runners[tid & tgmask].tid, -1, __ATOMIC_RELEASE);
+			__atomic_store_n(&runners[next & tgmask].tid, next, __ATOMIC_RELEASE);
+		} while (step == 2);
+	}
+	else if (arg_relax == 5) {
+		/* CPU relax in the loop, use load+store */
+		do {
+			while (__atomic_load_n(&runners[tid & tgmask].tid, __ATOMIC_ACQUIRE) != tid)
+				cpu_relax();
+			loops++;
+			__atomic_store_n(&runners[tid & tgmask].tid, -1, __ATOMIC_RELEASE);
+			__atomic_store_n(&runners[next & tgmask].tid, next, __ATOMIC_RELEASE);
+		} while (step == 2);
+	}
+	else if (arg_relax == 6) {
+		/* no CPU relax in the loop, use load+store */
+		do {
+			while (__atomic_load_n(&runners[tid & tgmask].tid, __ATOMIC_ACQUIRE) != tid)
+				;
+			loops++;
+			if ((tid ^ next) & tgmask)
+				__atomic_store_n(&runners[tid & tgmask].tid, -1, __ATOMIC_RELEASE);
+			__atomic_store_n(&runners[next & tgmask].tid, next, __ATOMIC_RELEASE);
+		} while (step == 2);
+	}
+	else if (arg_relax == 7) {
+		/* CPU relax in the loop, use load+store */
+		do {
+			while (__atomic_load_n(&runners[tid & tgmask].tid, __ATOMIC_ACQUIRE) != tid)
+				cpu_relax();
+			loops++;
+			if ((tid ^ next) & tgmask)
+				__atomic_store_n(&runners[tid & tgmask].tid, -1, __ATOMIC_RELEASE);
+			__atomic_store_n(&runners[next & tgmask].tid, next, __ATOMIC_RELEASE);
+		} while (step == 2);
+	}
 
 	fprintf(stderr, "thread %2d quitting after %lu loops\n", tid, loops);
 	stats[tid].done = loops;
