@@ -40,9 +40,11 @@ struct shared_data {
 
 /* one thread context */
 struct thread_ctx {
+	const void *wait_ptr; /* this is the element we loop on */
 	unsigned long tid;
 	unsigned long tid_bit;
 	unsigned long next;
+	unsigned long next_mask; // mask reporting next and above
 	pthread_t thr;
 	unsigned long long tot_done;
 	unsigned long long tot_wait;
@@ -122,6 +124,64 @@ static inline uint64_t now()
 	}
 }
 
+/* mask of all waiting threads */
+static unsigned long waiters;
+
+/* wraps an atomic op which returns <result> (0=failure, 1=success) on pointer
+ * <ptr> for thread <ctx>. Returns <result>.
+ */
+static inline int atomic_wrap(int result, const void *ptr, struct thread_ctx *ctx)
+{
+	if (!result) {
+		/* the atomic op failed, let's wait. If we're coming here for
+		 * the first time (wait_ptr==0), we don't wait and return
+		 * again. This guarantees that we won't block forever in a
+		 * TOCTOU case if the competing thread just left without
+		 * noticing us. It also allows to release this thread if the
+		 * competing one just left. Thus the rule is simple:
+		 *   - if we're waiting there's always a valid pointer
+		 *   - if the pointer is NULL we must not wait
+		 */
+		ptr = __atomic_exchange_n(&ctx->wait_ptr, ptr, __ATOMIC_RELEASE);
+		__atomic_or_fetch(&waiters, ctx->tid_bit, __ATOMIC_RELEASE);
+		if (ptr) {
+			while (__atomic_load_n(&ctx->wait_ptr, __ATOMIC_ACQUIRE))
+				cpu_relax_short();
+		}
+		return result;
+	} else {
+		/* the atomic test succeeded, let's see if others are waiting */
+		unsigned long others;
+		unsigned long bit;
+
+		others = __atomic_load_n(&waiters, __ATOMIC_ACQUIRE);
+		if (!others) {
+			/* we weren't even there, let's not start a bus write cycle */
+			return result;
+		}
+
+		/* OK let's refine and possibly unsubscribe if we were there */
+		others = __atomic_and_fetch(&waiters, ~ctx->tid_bit, __ATOMIC_RELEASE);
+		if (!others)
+			return result;
+
+		/* search first one after our bit */
+		bit = __builtin_ffsl(others & ctx->next_mask);
+		if (bit) {
+			/* thread <bit>-1 is waiting. Note: we could
+			 * also find its address from <ctx>.
+			 */
+			__atomic_store_n(&runners[bit-1].wait_ptr, 0, __ATOMIC_RELEASE);
+			return result;
+		}
+
+		/* no bit set above, so there's at least one below */
+		bit = __builtin_ffsl(others);
+		__atomic_store_n(&runners[bit-1].wait_ptr, 0, __ATOMIC_RELEASE);
+		return result;
+	}
+}
+
 /* simple counter increment using a CAS */
 void operation0(struct thread_ctx *ctx)
 {
@@ -172,6 +232,23 @@ void operation0(struct thread_ctx *ctx)
 			do {
 				new = old + 1;
 			} while (!__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED) && ({ cpu_relax_long(); 1; }));
+			curr = now();
+			tot_done++;
+			if (curr > prev) {
+				tot_wait += curr - prev;
+				if (curr - prev > max_wait)
+					max_wait = curr - prev;
+			}
+		} while (step == 2);
+	}
+	else if (arg_relax == 3) {
+		/* atomic_wrap() without relax */
+		do {
+			prev = now();
+			old = shared.counter;
+			do {
+				new = old + 1;
+			} while (!atomic_wrap(__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED), &shared.counter, ctx));
 			curr = now();
 			tot_done++;
 			if (curr > prev) {
@@ -246,6 +323,26 @@ void operation1(struct thread_ctx *ctx)
 				new ^= new >> 17;
 				new ^= new << 5;
 			} while (!__atomic_compare_exchange_n(&shared.rnd, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED) && ({ cpu_relax_long(); 1; }));
+			curr = now();
+			tot_done++;
+			if (curr > prev) {
+				tot_wait += curr - prev;
+				if (curr - prev > max_wait)
+					max_wait = curr - prev;
+			}
+		} while (step == 2);
+	}
+	else if (arg_relax == 3) {
+		/* atomic_wrap() without relax */
+		do {
+			prev = now();
+			old = shared.rnd;
+			do {
+				new = old;
+				new ^= new << 13;
+				new ^= new >> 17;
+				new ^= new << 5;
+			} while (!atomic_wrap(__atomic_compare_exchange_n(&shared.rnd, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED), &shared.rnd, ctx));
 			curr = now();
 			tot_done++;
 			if (curr > prev) {
@@ -415,9 +512,10 @@ int main(int argc, char **argv)
 	printf("Starting %d thread%c\n", nbthreads, (nbthreads > 1)?'s':' ');
 
 	for (u = 0; u < nbthreads; u++) {
-		runners[u].tid     = u;
-		runners[u].tid_bit = 1UL << u;
-		runners[u].next    = (u + 1) % nbthreads;
+		runners[u].tid       = u;
+		runners[u].tid_bit   = 1UL << u;
+		runners[u].next      = (u + 1) % nbthreads;
+		runners[u].next_mask = ~((1UL << ((u + 1) % nbthreads)) - 1);
 
 		err = pthread_create(&runners[u].thr, NULL, (void *)&run, (void *)(long)u);
 		if (err)
