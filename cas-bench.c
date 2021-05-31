@@ -124,8 +124,70 @@ static inline uint64_t now()
 	}
 }
 
-/* mask of all waiting threads */
+/* mask of all waiting threads. A bit there indicates that a thread must check
+ * its own wait_ptr before touching the shared area.
+ */
 static unsigned long waiters;
+
+/* wait for our turn if there are already other waiters. Returns zero if nobody
+ * is waiting, non-zero if we need to loop again to attempt the operation. The
+ * idea is to build loops like this:
+ *
+ *     do {
+ *        prepare_some_condition();
+ *     } while (atomic_wait() || (!atomic_wrap(CAS())));
+ *
+ * i.e. it's pointless to call the CAS after contention as its input condition
+ * changed and it *will* fail.
+ */
+static inline int atomic_wait(const void *ptr, struct thread_ctx *ctx)
+{
+	unsigned long others;
+
+	/* not possible, we don't have the guarantee there's still someone to
+	 * release us.
+	 */
+	//if (__atomic_load_n(&ctx->wait_ptr, __ATOMIC_ACQUIRE)) {
+	//	/* we already came there and must not disturb others */
+	//	do {
+	//		cpu_relax_short();
+	//	} while (__atomic_load_n(&ctx->wait_ptr, __ATOMIC_ACQUIRE));
+	//	return 1;
+	//}
+
+	others = __atomic_load_n(&waiters, __ATOMIC_ACQUIRE);
+	if (!others)
+		return 0;
+
+	if (!(others & ctx->tid_bit)) {
+		/* first pass here. We can't wait as we don't know if others
+		 * saw us, so we just add ourselves to the list of participants
+		 * and go back into the loop. We need to try at least once again
+		 * to avoid a TOCTOU issue.
+		 */
+		__atomic_store_n(&ctx->wait_ptr, ptr, __ATOMIC_RELEASE);
+		__atomic_or_fetch(&waiters, ctx->tid_bit, __ATOMIC_RELEASE);
+		return 0;
+	}
+	else {
+		/* we already tried and failed previously. If we come here
+		 * because we were woken up to try again, let's go on with
+		 * the CAS.
+		 */
+		if (!__atomic_load_n(&ctx->wait_ptr, __ATOMIC_ACQUIRE))
+			return 0;
+
+		/* Otherwise let's wait for someone else to wake us up and go
+		 * back to the loop without touching the shared areas.
+		 */
+		do {
+			cpu_relax_short();
+		} while (__atomic_load_n(&ctx->wait_ptr, __ATOMIC_ACQUIRE));
+
+		/* do not attempt the CAS, conditions have changed */
+		return 1;
+	}
+}
 
 /* wraps an atomic op which returns <result> (0=failure, 1=success) on pointer
  * <ptr> for thread <ctx>. Returns <result>.
@@ -133,20 +195,15 @@ static unsigned long waiters;
 static inline int atomic_wrap(int result, const void *ptr, struct thread_ctx *ctx)
 {
 	if (!result) {
-		/* the atomic op failed, let's wait. If we're coming here for
-		 * the first time (wait_ptr==0), we don't wait and return
-		 * again. This guarantees that we won't block forever in a
-		 * TOCTOU case if the competing thread just left without
-		 * noticing us. It also allows to release this thread if the
-		 * competing one just left. Thus the rule is simple:
-		 *   - if we're waiting there's always a valid pointer
-		 *   - if the pointer is NULL we must not wait
+		/* The atomic op failed and there was no registered waiters. It
+		 * means we were the second participant hence first contender.
+		 * We have to add our bit to the waiters list.
 		 */
-		ptr = __atomic_exchange_n(&ctx->wait_ptr, ptr, __ATOMIC_RELEASE);
-		__atomic_or_fetch(&waiters, ctx->tid_bit, __ATOMIC_RELEASE);
-		if (ptr) {
-			while (__atomic_load_n(&ctx->wait_ptr, __ATOMIC_ACQUIRE))
-				cpu_relax_short();
+		//__atomic_store_n(&ctx->wait_ptr, ptr, __ATOMIC_RELEASE);
+		if (__atomic_fetch_or(&waiters, ctx->tid_bit, __ATOMIC_RELEASE)) {
+			//while (__atomic_load_n(&ctx->wait_ptr, __ATOMIC_ACQUIRE)) {
+			//	cpu_relax_short();
+			//}
 		}
 		return result;
 	} else {
@@ -162,6 +219,8 @@ static inline int atomic_wrap(int result, const void *ptr, struct thread_ctx *ct
 
 		/* OK let's refine and possibly unsubscribe if we were there */
 		others = __atomic_and_fetch(&waiters, ~ctx->tid_bit, __ATOMIC_RELEASE);
+		//if (__atomic_load_n(&ctx->wait_ptr, __ATOMIC_ACQUIRE))
+		//	printf("bug @%d\n", __LINE__);
 		if (!others)
 			return result;
 
@@ -248,7 +307,8 @@ void operation0(struct thread_ctx *ctx)
 			old = shared.counter;
 			do {
 				new = old + 1;
-			} while (!atomic_wrap(__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED), &shared.counter, ctx));
+			} while (atomic_wait(&shared.counter, ctx) ||
+				 !atomic_wrap(__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED), &shared.counter, ctx));
 			curr = now();
 			tot_done++;
 			if (curr > prev) {
@@ -342,7 +402,8 @@ void operation1(struct thread_ctx *ctx)
 				new ^= new << 13;
 				new ^= new >> 17;
 				new ^= new << 5;
-			} while (!atomic_wrap(__atomic_compare_exchange_n(&shared.rnd, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED), &shared.rnd, ctx));
+			} while (atomic_wait(&shared.counter, ctx) ||
+				 !atomic_wrap(__atomic_compare_exchange_n(&shared.rnd, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED), &shared.rnd, ctx));
 			curr = now();
 			tot_done++;
 			if (curr > prev) {
