@@ -421,6 +421,202 @@ void operation1(struct thread_ctx *ctx)
 	ctx->max_wait = max_wait;
 }
 
+/* counter which waits for its turn using a CAS */
+void operation2(struct thread_ctx *ctx)
+{
+	unsigned long old, new, prev_ctr;
+	unsigned long long prev, curr;
+	unsigned long long tot_wait, tot_done, max_wait;
+
+	tot_wait = tot_done = max_wait = 0;
+	prev_ctr = ctx->tid;
+	if (arg_relax == 0) {
+		/* no relax at all */
+		do {
+			prev = now();
+			old = shared.counter;
+			do {
+				old = prev_ctr;
+				new = old + 1;
+			} while (!__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED) && step == 2);
+			curr = now();
+			tot_done++;
+			if (curr > prev) {
+				tot_wait += curr - prev;
+				if (curr - prev > max_wait)
+					max_wait = curr - prev;
+			}
+			prev_ctr += nbthreads;
+		} while (step == 2);
+	}
+	else if (arg_relax == 1) {
+		/* cpu_relax_short() */
+		do {
+			prev = now();
+			old = shared.counter;
+			do {
+				old = prev_ctr;
+				new = old + 1;
+			} while (!__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED) && ({ cpu_relax_short(); 1; }) && step == 2);
+			curr = now();
+			tot_done++;
+			if (curr > prev) {
+				tot_wait += curr - prev;
+				if (curr - prev > max_wait)
+					max_wait = curr - prev;
+			}
+			prev_ctr += nbthreads;
+		} while (step == 2);
+	}
+	else if (arg_relax == 2) {
+		/* cpu_relax_long() */
+		do {
+			prev = now();
+			old = shared.counter;
+			do {
+				old = prev_ctr;
+				new = old + 1;
+			} while (!__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED) && ({ cpu_relax_long(); 1; }) && step == 2);
+			curr = now();
+			tot_done++;
+			if (curr > prev) {
+				tot_wait += curr - prev;
+				if (curr - prev > max_wait)
+					max_wait = curr - prev;
+			}
+			prev_ctr += nbthreads;
+		} while (step == 2);
+	}
+	else if (arg_relax == 3) {
+		/* atomic_wrap() without relax */
+		do {
+			prev = now();
+			old = shared.counter;
+			do {
+				old = prev_ctr;
+				new = old + 1;
+			} while ((atomic_wait(&shared.counter, ctx) ||
+				  !atomic_wrap(__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED), &shared.counter, ctx)) && step == 2);
+			curr = now();
+			tot_done++;
+			if (curr > prev) {
+				tot_wait += curr - prev;
+				if (curr - prev > max_wait)
+					max_wait = curr - prev;
+			}
+			prev_ctr += nbthreads;
+		} while (step == 2);
+	}
+
+	ctx->tot_done = tot_done;
+	ctx->tot_wait = tot_wait;
+	ctx->max_wait = max_wait;
+}
+
+/* counter which waits for its turn using load then a CAS which must always
+ * succeed here (for simplicity)
+ */
+void operation3(struct thread_ctx *ctx)
+{
+	unsigned long old, new, prev_ctr;
+	unsigned long long prev, curr;
+	unsigned long long tot_wait, tot_done, max_wait;
+
+	tot_wait = tot_done = max_wait = old = 0;
+	prev_ctr = ctx->tid;
+	if (arg_relax == 0) {
+		/* no relax at all */
+		do {
+			prev = now();
+
+			while ((old = __atomic_load_n(&shared.counter, __ATOMIC_RELAXED)) != prev_ctr && step == 2)
+				;
+
+			new = old + 1;
+			if (!__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED) && step == 2)
+				abort();
+			curr = now();
+			tot_done++;
+			if (curr > prev) {
+				tot_wait += curr - prev;
+				if (curr - prev > max_wait)
+					max_wait = curr - prev;
+			}
+			prev_ctr += nbthreads;
+		} while (step == 2);
+	}
+	else if (arg_relax == 1) {
+		/* cpu_relax_short() */
+		do {
+			prev = now();
+
+			while ((old = __atomic_load_n(&shared.counter, __ATOMIC_RELAXED)) != prev_ctr && ({ cpu_relax_short(); 1; }) && step == 2)
+				;
+
+			new = old + 1;
+			if (!__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED) && step == 2)
+				abort();
+			curr = now();
+			tot_done++;
+			if (curr > prev) {
+				tot_wait += curr - prev;
+				if (curr - prev > max_wait)
+					max_wait = curr - prev;
+			}
+			prev_ctr += nbthreads;
+		} while (step == 2);
+	}
+	else if (arg_relax == 2) {
+		/* cpu_relax_long() */
+		do {
+			prev = now();
+
+			while ((old = __atomic_load_n(&shared.counter, __ATOMIC_RELAXED)) != prev_ctr && ({ cpu_relax_long(); 1; }) && step == 2)
+				;
+
+			new = old + 1;
+			if (!__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED) && step == 2)
+				abort();
+			curr = now();
+			tot_done++;
+			if (curr > prev) {
+				tot_wait += curr - prev;
+				if (curr - prev > max_wait)
+					max_wait = curr - prev;
+			}
+			prev_ctr += nbthreads;
+		} while (step == 2);
+	}
+	// not possible since we expect exact threads ordering that does not
+	// exactly match the atomic_wrap()'s ordering.
+	//else if (arg_relax == 3) {
+	//	/* atomic_wrap() without relax */
+	//	do {
+	//		prev = now();
+	//
+	//		while ((atomic_wait(&shared.counter, ctx) ||
+	//			!atomic_wrap((old = __atomic_load_n(&shared.counter, __ATOMIC_RELAXED)) == prev_ctr, &shared.counter, ctx)) && step == 2)
+	//			;
+	//
+	//		new = old + 1;
+	//		if (!__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED) && step == 2)
+	//			abort();
+	//		curr = now();
+	//		tot_done++;
+	//		if (curr > prev) {
+	//			tot_wait += curr - prev;
+	//			if (curr - prev > max_wait)
+	//				max_wait = curr - prev;
+	//		}
+	//		prev_ctr += nbthreads;
+	//	} while (step == 2);
+	//}
+
+	ctx->tot_done = tot_done;
+	ctx->tot_wait = tot_wait;
+	ctx->max_wait = max_wait;
+}
+
 void run(void *arg)
 {
 	const int tid = (long)arg;
@@ -443,6 +639,10 @@ void run(void *arg)
 		operation0(&runners[tid]);
 	else if (arg_op == 1)
 		operation1(&runners[tid]);
+	else if (arg_op == 2)
+		operation2(&runners[tid]);
+	else if (arg_op == 3)
+		operation3(&runners[tid]);
 	else
 		do { } while (step == 2);
 
