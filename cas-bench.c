@@ -89,7 +89,9 @@ static uint64_t now_cycles()
 {
 	uint64_t cycles = 0;
 #if defined(__x86_64__)
-	__asm__ __volatile__("rdtsc" : "=A" (cycles));
+	unsigned int a, d;
+	asm volatile("rdtsc" : "=a" (a), "=d" (d));
+	cycles = a + ((unsigned long long)d << 32);
 #endif
 	return cycles;
 }
