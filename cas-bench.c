@@ -92,6 +92,8 @@ static uint64_t now_cycles()
 	unsigned int a, d;
 	asm volatile("rdtsc" : "=a" (a), "=d" (d));
 	cycles = a + ((unsigned long long)d << 32);
+#elif defined(__aarch64__)
+	asm volatile("mrs %0, cntvct_el0" : "=r"(cycles));
 #endif
 	return cycles;
 }
