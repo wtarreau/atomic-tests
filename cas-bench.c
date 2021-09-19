@@ -122,8 +122,9 @@ static uint64_t now_us()
 static inline uint64_t now()
 {
 	switch (arg_meas) {
-	case 0:  return now_cycles();
-	case 1:  return now_ns();
+	case 0:  return 0;            // does not cost
+	case 1:  return now_cycles();
+	case 2:  return now_ns();
 	default: return now_us();
 	}
 }
@@ -682,7 +683,7 @@ void usage(const char *name, int ret)
 	    "  -g tgmask     group threads using this mask\n"
 	    "  -o operation  use this atomic op test (0..0)\n"
 	    "  -r relax_meth use this cpu_relax method (0..2)\n"
-	    "  -m measure    time measurement method (0..2)\n"
+	    "  -m measure    time measurement method (0=none,1=tsc,2=ns,3=us)\n"
 	    "  -d run_time   stop after this number of seconds\n"
 	    "  [thr:cpu]*    bind thread <thr> to CPU <cpu>\n",
 	    name);
