@@ -279,6 +279,8 @@ void operation0(struct thread_ctx *ctx)
 				if (__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
 					prev = old & 255;
 					ctx->stats[prev].s++; // success
+					if (failcnt >= 10)
+						atomic_wrap(1, &shared.counter, ctx);
 					break;
 				} else {
 					prev = old & 255;
@@ -286,8 +288,14 @@ void operation0(struct thread_ctx *ctx)
 					failcnt++;
 					// ryzen: 140ns with no relax, 20..50 l0 + l1, ..400 l0 + l1 in 10s
 					//cpu_relax_tiny(); // ryzen: 129ns, 20-50 l0, ~750 in 10s
-					cpu_relax_short(); // ryzen: 106ns and no lat0, even at 10s
+					//cpu_relax_short(); // ryzen: 106ns and no lat0, even at 10s
 					//cpu_relax_long(); // ryzen: 144ns and 1..13 l0, ..82 l0 at 10s
+					if (failcnt < 10)
+						;//cpu_relax_short();
+					else if (failcnt == 10)
+						atomic_wrap(0, &shared.counter, ctx);
+					else
+						atomic_wait(&shared.counter, ctx);
 				}
 			} while (1);
 
