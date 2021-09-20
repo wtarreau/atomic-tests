@@ -252,7 +252,48 @@ static inline int atomic_wrap(int result, const void *ptr, struct thread_ctx *ct
 	}
 }
 
-/* simple per-thread counter increment using a CAS */
+/* a queue to regulate access to a shared resource using tickets.
+ * The tickets have the following format:
+ *    [ next | curr ]
+ *      16b    16b
+ * The <next> part is incremented upon assignment and automatically wraps so
+ * that the caller doesn't have to care. The <curr> is incremented upon release
+ * so that it involves a check on the slow path, and it is cleared after the
+ * last one leaves so that requesters can simply check for 0 over the whole
+ * word to figure that tickets are not needed. It's not a problem since
+ * contended accesses leave curr != next, hence 0 == uncontended.
+ */
+static unsigned int queue;
+static unsigned int tot_tickets;
+
+/* Assign a ticket for a queue from the dispenser and return it. */
+static unsigned short get_ticket(unsigned int *queue)
+{
+	__atomic_fetch_add(&tot_tickets, 1, __ATOMIC_RELAXED);
+	return (__atomic_fetch_add(queue, 0x10000, __ATOMIC_RELAXED) >> 16) + 1;
+}
+
+/* wait for being called */
+static void wait_turn(unsigned int *queue, unsigned short ticket)
+{
+	while (__atomic_load_n(queue, __ATOMIC_ACQUIRE) >> 16 != ticket)
+		cpu_relax_short();
+}
+
+/* simple per-thread counter increment using a CAS, and tickets for congestion.
+ *
+ * Algorithm:
+ *   - if there are no waiters in queue, try the CAS directly, otherwise take
+ *     a ticket and wait for our turn
+ *   - in case of ticket-less access, there may be conflicts. Repeated failures
+ *     to proceed should result in taking a ticket and waiting for our turn.
+ *   - in case of ticket-based access, there should theoretically be no conflict
+ *     though code doing stuff out of this protection may still cause conflict,
+ *     so we must be prepared to retry immediately under the same ticket.
+ *   - upon release, the queue must be checked, regardless of the fact that
+ *     we got a ticket, because there could be some waiters that were
+ *     conflicting during our operations.
+ */
 void operation0(struct thread_ctx *ctx)
 {
 	unsigned long old, new;
@@ -260,6 +301,7 @@ void operation0(struct thread_ctx *ctx)
 	unsigned long prev; // prev id
 	unsigned long counter = 0;
 	unsigned long failcnt;
+	int ticket; // <0 = no ticket; 0..65535 = ticket
 
 	old = 0;
 	if (arg_relax == 0) {
@@ -276,11 +318,41 @@ void operation0(struct thread_ctx *ctx)
 			//ctx->stats[old & 255].s++; // success
 
 			do {
+				ticket = -1; // no ticket
+
+				/* are there waiters already ? If so we need a ticket */
+
+				if (__atomic_load_n(&queue, __ATOMIC_ACQUIRE)) {
+				assign_ticket:
+					/* there's some contention, we need to get a ticket */
+					ticket = get_ticket(&queue);
+					wait_turn(&queue, ticket);
+				}
+
+			try_again:
 				if (__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+					unsigned int waiters;
+
 					prev = old & 255;
 					ctx->stats[prev].s++; // success
-					if (failcnt >= 10)
-						atomic_wrap(1, &shared.counter, ctx);
+
+					/* we consumed our right through the queue, let's release someone else now */
+					waiters = __atomic_load_n(&queue, __ATOMIC_ACQUIRE);
+					if (waiters) {
+						/* 3 possibilities here:
+						 *    next == curr: nobody's waiting anymore, let's reset it
+						 *    curr  < 0xffff: atomic_inc is sufficient to unlock
+						 *    curr == 0xffff: use -0xffff to avoid wrapping
+						 */
+						if ((waiters >> 16 == waiters & 0xffff) &&
+						    __atomic_compare_exchange_n(&queue, &waiters, 0, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+							/* OK done*/
+						} else if (waiters & 0xffff == 0xffff)
+							__atomic_fetch_sub(&queue, 0xffff, __ATOMIC_RELAXED);
+						else
+							__atomic_fetch_add(&queue, 1, __ATOMIC_RELAXED);
+					}
+
 					break;
 				} else {
 					prev = old & 255;
@@ -290,12 +362,13 @@ void operation0(struct thread_ctx *ctx)
 					//cpu_relax_tiny(); // ryzen: 129ns, 20-50 l0, ~750 in 10s
 					//cpu_relax_short(); // ryzen: 106ns and no lat0, even at 10s
 					//cpu_relax_long(); // ryzen: 144ns and 1..13 l0, ..82 l0 at 10s
-					if (failcnt < 10)
-						;//cpu_relax_short();
-					else if (failcnt == 10)
-						atomic_wrap(0, &shared.counter, ctx);
-					else
-						atomic_wait(&shared.counter, ctx);
+
+					if (failcnt == 10) {
+						if (ticket < 0)
+							goto assign_ticket;
+					}
+					/* no ticket or not needed yet */
+					goto try_again;
 				}
 			} while (1);
 
@@ -563,9 +636,9 @@ int main(int argc, char **argv)
 	}
 	done = totf + tots;
 
-	printf("threads:%d  attempt:%llu  success:%llu(%.2f%%)  time(ms):%llu  rate:%lld/s  ns:%lld  hit:%.2f%%\n",
+	printf("threads:%d  attempt:%llu  success:%llu(%.2f%%)  time(ms):%llu  rate:%lld/s  ns:%lld  hit:%.2f%%, tickets:%u\n",
 	       nbthreads, done, tots, (tots * 100.0) / (done?done:1), stop / 1000ULL, tots * 1000000ULL / stop, stop * 1000ULL / (tots?tots:1),
-	       (tots*100.0)/done);
+	       (tots*100.0)/done, tot_tickets);
 
 	/* All the work has ended */
 	exit(0);
