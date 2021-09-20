@@ -280,6 +280,30 @@ static void wait_turn(unsigned int *queue, unsigned short ticket)
 		cpu_relax_short();
 }
 
+/* call next waiter in queue */
+static void next_one(unsigned int *queue)
+{
+	unsigned int waiters = __atomic_load_n(queue, __ATOMIC_ACQUIRE);
+
+	if (!waiters) {
+		/* pb: race here */
+		return;
+	}
+
+	/* 3 possibilities here:
+	 *    next == curr: nobody's waiting anymore, let's try to reset it
+	 *    curr  < 0xffff: atomic_inc is sufficient to unlock
+	 *    curr == 0xffff: use -0xffff to avoid wrapping
+	 */
+	if (((waiters >> 16) == (waiters & 0xffff)) &&
+	    __atomic_compare_exchange_n(queue, &waiters, 0, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+		return;
+	} else if ((waiters & 0xffff) == 0xffff)
+		__atomic_fetch_sub(queue, 0xffff, __ATOMIC_RELAXED);
+	else
+		__atomic_fetch_add(queue, 1, __ATOMIC_RELAXED);
+}
+
 /* simple per-thread counter increment using a CAS, and tickets for congestion.
  *
  * Algorithm:
@@ -311,66 +335,36 @@ void operation0(struct thread_ctx *ctx)
 			new = counter + tid;
 			counter += 65536;
 
-			//while (!__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
-			//	ctx->stats[old & 255].f++; // failure
-			//	failcnt++;
-			//}
-			//ctx->stats[old & 255].s++; // success
+			ticket = -1; // no ticket
 
-			do {
-				ticket = -1; // no ticket
+			/* are there waiters already ? If so we need a ticket */
 
-				/* are there waiters already ? If so we need a ticket */
-
-				if (__atomic_load_n(&queue, __ATOMIC_ACQUIRE)) {
-				assign_ticket:
+			if (__atomic_load_n(&queue, __ATOMIC_ACQUIRE)) {
+			assign_ticket:
+				//if (ticket < 0) {
 					/* there's some contention, we need to get a ticket */
 					ticket = get_ticket(&queue);
 					wait_turn(&queue, ticket);
+					//}// else
+				//	abort();
+			}
+
+			while (!__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+				prev = old & 255;
+				ctx->stats[prev].f++; // failure
+				failcnt++;
+
+				if (failcnt == 10) {
+					if (ticket < 0)
+						goto assign_ticket;
 				}
+				/* no ticket or not needed yet */
+			}
+			prev = old & 255;
+			ctx->stats[prev].s++; // success
 
-			try_again:
-				if (__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
-					unsigned int waiters;
-
-					prev = old & 255;
-					ctx->stats[prev].s++; // success
-
-					/* we consumed our right through the queue, let's release someone else now */
-					waiters = __atomic_load_n(&queue, __ATOMIC_ACQUIRE);
-					if (waiters) {
-						/* 3 possibilities here:
-						 *    next == curr: nobody's waiting anymore, let's reset it
-						 *    curr  < 0xffff: atomic_inc is sufficient to unlock
-						 *    curr == 0xffff: use -0xffff to avoid wrapping
-						 */
-						if ((waiters >> 16 == waiters & 0xffff) &&
-						    __atomic_compare_exchange_n(&queue, &waiters, 0, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
-							/* OK done*/
-						} else if (waiters & 0xffff == 0xffff)
-							__atomic_fetch_sub(&queue, 0xffff, __ATOMIC_RELAXED);
-						else
-							__atomic_fetch_add(&queue, 1, __ATOMIC_RELAXED);
-					}
-
-					break;
-				} else {
-					prev = old & 255;
-					ctx->stats[prev].f++; // failure
-					failcnt++;
-					// ryzen: 140ns with no relax, 20..50 l0 + l1, ..400 l0 + l1 in 10s
-					//cpu_relax_tiny(); // ryzen: 129ns, 20-50 l0, ~750 in 10s
-					//cpu_relax_short(); // ryzen: 106ns and no lat0, even at 10s
-					//cpu_relax_long(); // ryzen: 144ns and 1..13 l0, ..82 l0 at 10s
-
-					if (failcnt == 10) {
-						if (ticket < 0)
-							goto assign_ticket;
-					}
-					/* no ticket or not needed yet */
-					goto try_again;
-				}
-			} while (1);
+			/* we consumed our right through the queue, let's release someone else now */
+			next_one(&queue);
 
 			if (__builtin_expect(failcnt >= 256, 1)) {
 				int idx;
