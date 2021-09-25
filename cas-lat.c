@@ -24,6 +24,7 @@
 #include <sched.h>
 
 #define MAXTHREADS	64
+#define WAITL0		2    // l0=2^WAITL0 loops min
 
 static volatile unsigned int step __attribute__((aligned(64)));
 static struct timeval start, stop;
@@ -50,7 +51,7 @@ struct thread_ctx {
 	struct {
 		unsigned int f, s; // failure, success
 	} stats[MAXTHREADS]; // per remote thread: keep it below 8B per thread for optimal asm
-	unsigned long loops[4]; // >=256; >=4096; >=65536; >= 1048576
+	unsigned long loops[16]; // >=4, >=16, >=64, >=256 ...
 } __attribute__((aligned(64)));
 
 static struct thread_ctx runners[MAXTHREADS];
@@ -373,20 +374,11 @@ void operation0(struct thread_ctx *ctx)
 			/* we consumed our right through the queue, let's release someone else now */
 			next_one(&queue);
 
-			if (__builtin_expect(failcnt >= 256, 1)) {
-				int idx;
-
-				if (failcnt < 4096)
-					idx = 0;
-				else if (failcnt < 65536)
-					idx = 1;
-				else if (failcnt < 1048576)
-					idx = 2;
-				else
-					idx = 3;
-
-				ctx->loops[idx]++;
+			if (faillog >= WAITL0) {
+				faillog -= WAITL0;
+				ctx->loops[faillog >> 1]++;
 			}
+
 		} while (step == 2);
 	}
 
@@ -605,7 +597,7 @@ int main(int argc, char **argv)
 		}
 
 		printf(" tt=%5.1f%%", tot*100.0/done);
-		for (v = 0; v < 4; v++)
+		for (v = 0; v < 16; v++)
 			if (runners[u].loops[v])
 				printf(" l%u=%lu", v, runners[u].loops[v]);
 		printf("\n    ");
