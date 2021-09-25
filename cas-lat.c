@@ -324,14 +324,14 @@ void operation0(struct thread_ctx *ctx)
 	unsigned long tid = ctx->tid; // thread id
 	unsigned long prev; // prev id
 	unsigned long counter = 0;
-	unsigned long failcnt;
+	unsigned long failcnt, prevcnt, faillog;
 	int ticket; // <0 = no ticket; 0..65535 = ticket
 
 	old = 0;
 	if (arg_relax == 0) {
 		/* no relax at all */
 		do {
-			failcnt = 0;
+			faillog = prevcnt = failcnt = 0;
 			new = counter + tid;
 			counter += 65536;
 
@@ -339,26 +339,28 @@ void operation0(struct thread_ctx *ctx)
 
 			/* are there waiters already ? If so we need a ticket */
 
-			if (__atomic_load_n(&queue, __ATOMIC_ACQUIRE)) {
-			assign_ticket:
-				//if (ticket < 0) {
-					/* there's some contention, we need to get a ticket */
-					ticket = get_ticket(&queue);
-					wait_turn(&queue, ticket);
-					//}// else
-				//	abort();
-			}
+			//if (__atomic_load_n(&queue, __ATOMIC_ACQUIRE)) {
+			//assign_ticket:
+			//	//if (ticket < 0) {
+			//		/* there's some contention, we need to get a ticket */
+			//		ticket = get_ticket(&queue);
+			//		wait_turn(&queue, ticket);
+			//		//}// else
+			//	//	abort();
+			//}
 
 			while (!__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
 				prev = old & 255;
 				ctx->stats[prev].f++; // failure
-				failcnt++;
+				prevcnt = failcnt++;
 
-				if (failcnt == 10) {
-					if (ticket < 0)
-						goto assign_ticket;
+				while ((prevcnt & failcnt) & 0xFFFFFF) {
+					//cpu_relax_short();
+					//cpu_relax_tiny();
+					failcnt++;
 				}
-				/* no ticket or not needed yet */
+				// new power of two
+				faillog++;
 			}
 			prev = old & 255;
 			ctx->stats[prev].s++; // success
