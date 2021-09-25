@@ -357,8 +357,11 @@ void operation0(struct thread_ctx *ctx)
 						break;
 					}
 				}
+				//cpu_relax_long();
+				//cpu_relax_short();
 			}
 
+			old = __atomic_load_n(&shared.counter, __ATOMIC_ACQUIRE);
 			if (!__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
 				prev = old & 255;
 				ctx->stats[prev].f++; // failure
@@ -369,6 +372,8 @@ void operation0(struct thread_ctx *ctx)
 				//
 				//if (faillog > prevlog)
 				//	__atomic_store_n(&queue, faillog, __ATOMIC_RELEASE);
+				//cpu_relax_long();
+				//cpu_relax_short();
 				goto try_again;
 			}
 
