@@ -324,7 +324,7 @@ void operation0(struct thread_ctx *ctx)
 	unsigned long tid = ctx->tid; // thread id
 	unsigned long prev; // prev id
 	unsigned long counter = 0;
-	unsigned long failcnt, prevcnt, faillog;
+	unsigned long failcnt, prevcnt, faillog, prevlog;
 	int ticket; // <0 = no ticket; 0..65535 = ticket
 
 	old = 0;
@@ -337,31 +337,36 @@ void operation0(struct thread_ctx *ctx)
 
 			ticket = -1; // no ticket
 
-			/* are there waiters already ? If so we need a ticket */
+			/* If others have been waiting longer than us, we have
+			 * to let them pass first.
+			 */
+		try_again:
+			while (1) {
+				prevlog = __atomic_load_n(&queue, __ATOMIC_ACQUIRE);
+				if (faillog >= prevlog) {
+					/* only those exactly equal to the max get out of the loop, the
+					 * other ones set their max and loop again, this forces an
+					 * election just after it as zeroed.
+					 */
+					if (faillog > prevlog)
+						__atomic_store_n(&queue, faillog, __ATOMIC_RELEASE);
+					else
+						break;
+				}
+				prevcnt = failcnt++;
+				if ((prevcnt & failcnt) == 0)
+					faillog++;
+			}
 
-			//if (__atomic_load_n(&queue, __ATOMIC_ACQUIRE)) {
-			//assign_ticket:
-			//	//if (ticket < 0) {
-			//		/* there's some contention, we need to get a ticket */
-			//		ticket = get_ticket(&queue);
-			//		wait_turn(&queue, ticket);
-			//		//}// else
-			//	//	abort();
-			//}
-
-			while (!__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+			if (!__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
 				prev = old & 255;
 				ctx->stats[prev].f++; // failure
-				prevcnt = failcnt++;
-
-				while ((prevcnt & failcnt) & 0xFFFFFF) {
-					//cpu_relax_short();
-					//cpu_relax_tiny();
-					failcnt++;
-				}
-				// new power of two
-				faillog++;
+				goto try_again;
 			}
+
+			/* next one! */
+			__atomic_store_n(&queue, 0, __ATOMIC_RELEASE);
+
 			prev = old & 255;
 			ctx->stats[prev].s++; // success
 
