@@ -344,35 +344,43 @@ void operation0(struct thread_ctx *ctx)
 		try_again:
 			while (1) {
 				prevlog = __atomic_load_n(&queue, __ATOMIC_ACQUIRE);
-				if (faillog >= prevlog) {
-					/* only those exactly equal to the max get out of the loop, the
-					 * other ones set their max and loop again, this forces an
-					 * election just after it as zeroed.
-					 */
-					if (faillog > prevlog)
-						__atomic_store_n(&queue, faillog, __ATOMIC_RELEASE);
-					else
-						break;
-				}
+				if (!prevlog)
+					break;
+			failed:
 				prevcnt = failcnt++;
-				if ((prevcnt & failcnt) == 0)
+				if ((prevcnt & failcnt) == 0) {
 					faillog++;
+					if (faillog >= prevlog) {
+						/* let's get out and try to pass */
+						if (faillog > prevlog/* && faillog >= 8*/)
+							__atomic_store_n(&queue, faillog, __ATOMIC_RELEASE);
+						break;
+					}
+				}
 			}
 
 			if (!__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
 				prev = old & 255;
 				ctx->stats[prev].f++; // failure
+				//goto failed;
+				//prevcnt = failcnt++;
+				//if ((prevcnt & failcnt) == 0)
+				//	faillog++;
+				//
+				//if (faillog > prevlog)
+				//	__atomic_store_n(&queue, faillog, __ATOMIC_RELEASE);
 				goto try_again;
 			}
 
 			/* next one! */
-			__atomic_store_n(&queue, 0, __ATOMIC_RELEASE);
+			if (failcnt)
+				__atomic_store_n(&queue, faillog / 2, __ATOMIC_RELEASE);
 
 			prev = old & 255;
 			ctx->stats[prev].s++; // success
 
 			/* we consumed our right through the queue, let's release someone else now */
-			next_one(&queue);
+			//next_one(&queue);
 
 			if (faillog >= WAITL0) {
 				faillog -= WAITL0;
