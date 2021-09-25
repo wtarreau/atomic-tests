@@ -373,8 +373,8 @@ void operation0(struct thread_ctx *ctx)
 			}
 
 			/* next one! */
-			if (failcnt)
-				__atomic_store_n(&queue, faillog / 2, __ATOMIC_RELEASE);
+			if (prevlog)
+				__atomic_store_n(&queue, prevlog / 4, __ATOMIC_RELEASE);
 
 			prev = old & 255;
 			ctx->stats[prev].s++; // success
