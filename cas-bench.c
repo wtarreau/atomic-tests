@@ -674,7 +674,7 @@ void operation4(struct thread_ctx *ctx)
 		 * lowered.
 		 */
 		do {
-			unsigned long avg_curr;
+			unsigned long avg_curr = 2;
 			int faillog = -1; // faillog=0 for cnt=1
 
 			prevcnt = failcnt = 0;
@@ -683,21 +683,19 @@ void operation4(struct thread_ctx *ctx)
 
 			while (1) {
 				do {
-					if (!(prevcnt & failcnt)) {
-						//if (failcnt && !(prevcnt & failcnt)) {
+					if (!(prevcnt & ++failcnt)) {
 						//if (failcnt++ && !(prevcnt & failcnt)) {
 						//if ((failcnt ^ prevcnt) >= failcnt) { // crossed a power-of-two
 						/* most threads will wake up at approximately the same time,
 						 * so let's only update avg_wait on the first one that changes
 						 * it.
 						 */
-						__atomic_compare_exchange_n(&avg_wait, &avg_curr, failcnt, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+						__atomic_compare_exchange_n(&avg_wait, &avg_curr, 1/*failcnt*/, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
 						prevcnt = failcnt;
 						faillog++;
 					}
 					else
 						avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
-					failcnt++;
 				} while (failcnt < avg_curr);
 
 				old = __atomic_load_n(&shared.counter, __ATOMIC_ACQUIRE);
