@@ -700,11 +700,11 @@ void operation4(struct thread_ctx *ctx)
 					do {
 						cpu_relax_smt();
 
-						if (loopcnt > 2*avg_curr) {
+						if ((loopcnt & 31) == 4)
+							avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
+						else if (loopcnt > 2*avg_curr) {
 							avg_curr = __atomic_exchange_n(&avg_wait, loopcnt, __ATOMIC_RELAXED);
 						}
-						else if ((loopcnt & 15) == 0)
-							avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
 					} while (loopcnt++ <= avg_curr);
 				}
 				/* make sure we always enter the block above on next passes */
