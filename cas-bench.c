@@ -695,8 +695,7 @@ void operation4(struct thread_ctx *ctx)
 					}
 				}
 
-				if (faillog > 0)
-					old = __atomic_load_n(&shared.counter, __ATOMIC_ACQUIRE);
+				old = __atomic_load_n(&shared.counter, __ATOMIC_ACQUIRE);
 				if (__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED))
 					break;
 
