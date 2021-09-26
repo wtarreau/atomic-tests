@@ -622,6 +622,55 @@ void operation3(struct thread_ctx *ctx)
 	ctx->max_wait = max_wait;
 }
 
+/* simple per-thread counter increment using a CAS, and tickets for congestion. */
+void operation4(struct thread_ctx *ctx)
+{
+	unsigned long tid = ctx->tid; // thread id
+	unsigned long old, new;
+	unsigned long counter;
+	unsigned long failcnt, prevcnt;
+	unsigned long long tot_done, tot_wait, max_wait;
+
+	old = 0;
+	counter = 0;
+	tot_done = tot_wait = max_wait = 0;
+	if (arg_relax == 0) {
+		/* no relax at all */
+		do {
+			int faillog = -1; // faillog=0 for cnt=1
+
+			prevcnt = failcnt = 0;
+			new = counter + tid;
+			counter += 65536;
+
+			while (1) {
+				old = __atomic_load_n(&shared.counter, __ATOMIC_ACQUIRE);
+				if (__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED))
+					break;
+
+				failcnt++;
+				if (!(prevcnt & failcnt)) {
+					prevcnt = failcnt;
+					faillog++;
+				}
+			}
+
+			if (faillog >= WAITL0) {
+				faillog -= WAITL0;
+				ctx->loops[faillog >> 1]++;
+			}
+
+			tot_done++;
+			tot_wait += failcnt;
+			if (failcnt > max_wait)
+				max_wait = failcnt;
+		} while (step == 2);
+	}
+	ctx->tot_done = tot_done;
+	ctx->tot_wait = tot_wait;
+	ctx->max_wait = max_wait;
+}
+
 void run(void *arg)
 {
 	const int tid = (long)arg;
@@ -648,6 +697,8 @@ void run(void *arg)
 		operation2(&runners[tid]);
 	else if (arg_op == 3)
 		operation3(&runners[tid]);
+	else if (arg_op == 4)
+		operation4(&runners[tid]);
 	else
 		do { } while (step == 2);
 
@@ -683,7 +734,7 @@ void usage(const char *name, int ret)
 	    "  -h            display this help\n"
 	    "  -t threads    use this number of threads\n"
 	    "  -g tgmask     group threads using this mask\n"
-	    "  -o operation  use this atomic op test (0..0)\n"
+	    "  -o operation  use this atomic op test (0..4)\n"
 	    "  -r relax_meth use this cpu_relax method (0..2)\n"
 	    "  -m measure    time measurement method (0=none,1=tsc,2=ns,3=us)\n"
 	    "  -d run_time   stop after this number of seconds\n"
