@@ -674,37 +674,47 @@ void operation4(struct thread_ctx *ctx)
 		 * lowered.
 		 */
 		do {
-			unsigned long avg_curr = 2;
+			unsigned long avg_curr;
 			int faillog = -1; // faillog=0 for cnt=1
 
 			prevcnt = failcnt = 0;
 			new = counter + tid;
 			counter += 65536;
 
+			avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
 			while (1) {
+				if (failcnt >= avg_curr) {
+					/* perform the atomic op */
+					old = __atomic_load_n(&shared.counter, __ATOMIC_ACQUIRE);
+					if (__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+						/* wake other threads and give them a chance to pass */
+						if (avg_curr || failcnt >= 4)
+							__atomic_compare_exchange_n(&avg_wait, &avg_curr, failcnt >> 2, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+						break;
+					}
+				}
+
+				if (failcnt > avg_curr)
+					__atomic_compare_exchange_n(&avg_wait, &avg_curr, failcnt, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+
 				do {
-					if (!(prevcnt & ++failcnt)) {
+					failcnt++;
+					if (!(prevcnt & failcnt)) {
 						//if (failcnt++ && !(prevcnt & failcnt)) {
 						//if ((failcnt ^ prevcnt) >= failcnt) { // crossed a power-of-two
 						/* most threads will wake up at approximately the same time,
 						 * so let's only update avg_wait on the first one that changes
 						 * it.
 						 */
-						__atomic_compare_exchange_n(&avg_wait, &avg_curr, 1/*failcnt*/, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+						//cpu_relax_long();
+						//cpu_relax_short();
+						//__atomic_compare_exchange_n(&avg_wait, &avg_curr, failcnt, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
 						prevcnt = failcnt;
 						faillog++;
+						//break;
 					}
-					else
-						avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
-				} while (failcnt < avg_curr);
-
-				old = __atomic_load_n(&shared.counter, __ATOMIC_ACQUIRE);
-				if (__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
-					/* wake other threads and give them a chance to pass */
-					if (avg_curr)
-						__atomic_compare_exchange_n(&avg_wait, &avg_curr, failcnt >> 2, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
-					break;
-				}
+					avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
+				} while (/*avg_curr > 2 &&*/ failcnt < avg_curr);
 			}
 
 
