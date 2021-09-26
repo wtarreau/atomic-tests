@@ -24,6 +24,7 @@
 #include <sched.h>
 
 #define MAXTHREADS	64
+#define WAITL0		2  // l0=2^WAITL0 loops min
 
 static volatile unsigned int step __attribute__((aligned(64)));
 static struct timeval start, stop;
@@ -49,6 +50,7 @@ struct thread_ctx {
 	unsigned long long tot_done;
 	unsigned long long tot_wait;
 	unsigned long long max_wait;
+	unsigned long loops[16]; // >=4, >=16, >=64, >=256 ...
 } __attribute__((aligned(64)));
 
 static struct thread_ctx runners[MAXTHREADS];
@@ -807,9 +809,15 @@ int main(int argc, char **argv)
 
 	done = 0;
 	for (u = 0; u < nbthreads; u++) {
+		int v;
+
 		done += runners[u].tot_done;
-		printf("Thread %d: tot_done %10llu, tot_wait %12llu, max_wait %llu\n",
+		printf("Thread %3d: tot_done %10llu, tot_wait %12llu, max_wait %3llu",
 		       u, runners[u].tot_done, runners[u].tot_wait, runners[u].max_wait);
+		for (v = 0; v < 16; v++)
+			if (runners[u].loops[v])
+				printf(" l%u=%lu", WAITL0+2*v, runners[u].loops[v]);
+		printf("\n");
 	}
 
 	printf("threads: %d done: %llu time(ms): %llu rate: %lld/s ns: %lld\n",
