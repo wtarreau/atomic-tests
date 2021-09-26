@@ -682,17 +682,11 @@ void operation4(struct thread_ctx *ctx)
 			counter += 65536;
 
 			while (1) {
-				while (1) {
-					avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
-				try_again:
-					if (failcnt >= avg_curr) {
-						/* it's time to try again (maybe the first time). */
-						break;
-					}
-
-				failed:
-					failcnt++;
+				do {
 					if (!(prevcnt & failcnt)) {
+						//if (failcnt && !(prevcnt & failcnt)) {
+						//if (failcnt++ && !(prevcnt & failcnt)) {
+						//if ((failcnt ^ prevcnt) >= failcnt) { // crossed a power-of-two
 						/* most threads will wake up at approximately the same time,
 						 * so let's only update avg_wait on the first one that changes
 						 * it.
@@ -700,19 +694,21 @@ void operation4(struct thread_ctx *ctx)
 						__atomic_compare_exchange_n(&avg_wait, &avg_curr, failcnt, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
 						prevcnt = failcnt;
 						faillog++;
-						goto try_again;
 					}
-				}
+					else
+						avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
+					failcnt++;
+				} while (failcnt < avg_curr);
 
 				old = __atomic_load_n(&shared.counter, __ATOMIC_ACQUIRE);
-				if (__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED))
+				if (__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+					/* wake other threads and give them a chance to pass */
+					if (avg_curr)
+						__atomic_compare_exchange_n(&avg_wait, &avg_curr, failcnt >> 2, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
 					break;
-				goto failed;
+				}
 			}
 
-			/* wake other threads and give them a chance to pass */
-			if (avg_curr)
-				__atomic_compare_exchange_n(&avg_wait, &avg_curr, failcnt >> 2, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
 
 			if (faillog >= WAITL0) {
 				faillog -= WAITL0;
