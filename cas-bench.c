@@ -682,7 +682,14 @@ void operation4(struct thread_ctx *ctx)
 			counter += 65536;
 
 			while (1) {
-				while (failcnt < (avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE))) {
+				while (1) {
+					avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
+				try_again:
+					if (failcnt >= avg_curr) {
+						/* it's time to try again (maybe the first time). */
+						break;
+					}
+
 					failcnt++;
 					if (!(prevcnt & failcnt)) {
 						/* most threads will wake up at approximately the same time,
@@ -692,6 +699,7 @@ void operation4(struct thread_ctx *ctx)
 						__atomic_compare_exchange_n(&avg_wait, &avg_curr, failcnt, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
 						prevcnt = failcnt;
 						faillog++;
+						goto try_again;
 					}
 				}
 
@@ -708,6 +716,7 @@ void operation4(struct thread_ctx *ctx)
 					__atomic_compare_exchange_n(&avg_wait, &avg_curr, failcnt, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
 					prevcnt = failcnt;
 					faillog++;
+					goto try_again;
 				}
 			}
 
