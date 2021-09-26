@@ -630,7 +630,7 @@ void operation4(struct thread_ctx *ctx)
 	unsigned long tid = ctx->tid; // thread id
 	unsigned long old, new;
 	unsigned long counter;
-	unsigned long failcnt, prevcnt;
+	unsigned long failcnt, prevcnt, loopcnt;
 	unsigned long long tot_done, tot_wait, max_wait;
 
 	old = 0;
@@ -677,29 +677,37 @@ void operation4(struct thread_ctx *ctx)
 			unsigned long avg_curr;
 			int faillog = -1; // faillog=0 for cnt=1
 
-			prevcnt = failcnt = 0;
+			prevcnt = failcnt = loopcnt = 0;
 			new = counter + tid;
 			counter += 65536;
 
 			avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
 			while (1) {
-				if (failcnt >= avg_curr) {
+				if (loopcnt >= avg_curr) {
 					/* perform the atomic op */
 					old = __atomic_load_n(&shared.counter, __ATOMIC_ACQUIRE);
 					if (__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
 						/* wake other threads and give them a chance to pass */
-						if (avg_curr || failcnt >= 4)
-							__atomic_compare_exchange_n(&avg_wait, &avg_curr, failcnt >> 2, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+						if (avg_curr || loopcnt >= 4)
+							__atomic_compare_exchange_n(&avg_wait, &avg_curr, loopcnt >> 2, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
 						break;
+					}
+
+					/* measure number of failures */
+					failcnt++;
+					if (!(prevcnt & failcnt)) {
+						prevcnt = failcnt;
+						faillog++;
 					}
 				}
 
-				if (failcnt > avg_curr)
-					__atomic_compare_exchange_n(&avg_wait, &avg_curr, failcnt, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+				if (loopcnt > avg_curr)
+					__atomic_compare_exchange_n(&avg_wait, &avg_curr, loopcnt, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
 
 				do {
-					failcnt++;
-					if (!(prevcnt & failcnt)) {
+					loopcnt++;
+					if ((loopcnt & (loopcnt - 1)) == 0) {
+						//if (!(loopcnt & 1)) {
 						//if (failcnt++ && !(prevcnt & failcnt)) {
 						//if ((failcnt ^ prevcnt) >= failcnt) { // crossed a power-of-two
 						/* most threads will wake up at approximately the same time,
@@ -709,12 +717,12 @@ void operation4(struct thread_ctx *ctx)
 						//cpu_relax_long();
 						//cpu_relax_short();
 						//__atomic_compare_exchange_n(&avg_wait, &avg_curr, failcnt, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
-						prevcnt = failcnt;
-						faillog++;
+						//prevcnt = failcnt;
+						//faillog++;
 						//break;
 					}
 					avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
-				} while (/*avg_curr > 2 &&*/ failcnt < avg_curr);
+				} while (/*avg_curr > 2 &&*/ loopcnt < avg_curr);
 			}
 
 
@@ -926,8 +934,9 @@ int main(int argc, char **argv)
 		int v;
 
 		done += runners[u].tot_done;
-		printf("Thread %3d: tot_done %10llu, tot_wait %12llu, max_wait %3llu",
-		       u, runners[u].tot_done, runners[u].tot_wait, runners[u].max_wait);
+		if (runners[u].tot_done)
+			printf("Thread %3d: tot_wait %12llu, tot_done %10llu (%3u%%), max_wait %3llu",
+			       u, runners[u].tot_wait, runners[u].tot_done, (unsigned int)(runners[u].tot_done * 100ULL / (runners[u].tot_done + runners[u].tot_wait)), runners[u].max_wait);
 		for (v = 0; v < 16; v++)
 			if (runners[u].loops[v])
 				printf(" l%u=%lu", WAITL0+2*v, runners[u].loops[v]);
