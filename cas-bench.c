@@ -622,6 +622,8 @@ void operation3(struct thread_ctx *ctx)
 	ctx->max_wait = max_wait;
 }
 
+static unsigned int avg_wait __attribute__((aligned(64)));
+
 /* simple per-thread counter increment using a CAS, and tickets for congestion. */
 void operation4(struct thread_ctx *ctx)
 {
@@ -654,6 +656,54 @@ void operation4(struct thread_ctx *ctx)
 					faillog++;
 				}
 			}
+
+			if (faillog >= WAITL0) {
+				faillog -= WAITL0;
+				ctx->loops[faillog >> 1]++;
+			}
+
+			tot_done++;
+			tot_wait += failcnt;
+			if (failcnt > max_wait)
+				max_wait = failcnt;
+		} while (step == 2);
+	} else if (arg_relax == 1) {
+		/* relax based on avg wait time. Each thread waits at least as
+		 * long as the avg wait time others are experiencing before
+		 * starting to disturb others. On success, the avg waittime is
+		 * lowered.
+		 */
+		do {
+			int faillog = -1; // faillog=0 for cnt=1
+
+			prevcnt = failcnt = 0;
+			new = counter + tid;
+			counter += 65536;
+
+			while (1) {
+				while (failcnt < __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE)) {
+					failcnt++;
+					if (!(prevcnt & failcnt)) {
+						prevcnt = failcnt;
+						faillog++;
+						__atomic_store_n(&avg_wait, failcnt, __ATOMIC_RELEASE);
+					}
+				}
+
+				old = __atomic_load_n(&shared.counter, __ATOMIC_ACQUIRE);
+				if (__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED))
+					break;
+
+				failcnt++;
+				if (!(prevcnt & failcnt)) {
+					prevcnt = failcnt;
+					faillog++;
+					__atomic_store_n(&avg_wait, failcnt, __ATOMIC_RELEASE);
+				}
+			}
+
+			/* wake other threads and give them a chance to pass */
+			__atomic_store_n(&avg_wait, failcnt >> 1, __ATOMIC_RELEASE);
 
 			if (faillog >= WAITL0) {
 				faillog -= WAITL0;
