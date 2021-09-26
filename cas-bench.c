@@ -684,21 +684,34 @@ void operation4(struct thread_ctx *ctx)
 				while (failcnt < __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE)) {
 					failcnt++;
 					if (!(prevcnt & failcnt)) {
+						unsigned long oldcnt = prevcnt;
+
+						/* most threads will wake up at approximately the same time,
+						 * so let's only update avg_wait on the first one that changes
+						 * it.
+						 */
+						__atomic_compare_exchange_n(&avg_wait, &oldcnt, failcnt, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
 						prevcnt = failcnt;
 						faillog++;
-						__atomic_store_n(&avg_wait, failcnt, __ATOMIC_RELEASE);
 					}
 				}
 
-				old = __atomic_load_n(&shared.counter, __ATOMIC_ACQUIRE);
+				if (faillog > 0)
+					old = __atomic_load_n(&shared.counter, __ATOMIC_ACQUIRE);
 				if (__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED))
 					break;
 
 				failcnt++;
 				if (!(prevcnt & failcnt)) {
+					unsigned long oldcnt = prevcnt;
+
+					/* most threads will wake up at approximately the same time,
+					 * so let's only update avg_wait on the first one that changes
+					 * it.
+					 */
+					__atomic_compare_exchange_n(&avg_wait, &oldcnt, failcnt, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
 					prevcnt = failcnt;
 					faillog++;
-					__atomic_store_n(&avg_wait, failcnt, __ATOMIC_RELEASE);
 				}
 			}
 
