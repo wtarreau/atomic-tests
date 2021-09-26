@@ -682,18 +682,31 @@ void operation4(struct thread_ctx *ctx)
 			counter += 65536;
 
 			avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
+			if (avg_curr) {
+				do {
+					cpu_relax_long();
+					loopcnt++;
+					if (loopcnt > 2*avg_curr) {
+						__atomic_compare_exchange_n(&avg_wait, &avg_curr, loopcnt, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+					}
+					else if ((loopcnt & 15) == 0)
+						avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
+				} while (loopcnt < avg_curr);
+			}
+
 			while (1) {
 				if (loopcnt >= avg_curr) {
 					/* perform the atomic op */
 					old = __atomic_load_n(&shared.counter, __ATOMIC_ACQUIRE);
 					if (__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
 						/* wake other threads and give them a chance to pass */
-						if (avg_curr || loopcnt >= 4)
-							__atomic_compare_exchange_n(&avg_wait, &avg_curr, loopcnt >> 2, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+						if (avg_curr)
+							__atomic_compare_exchange_n(&avg_wait, &avg_curr, loopcnt >> 1 /*loopcnt - avg_curr*/, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+						//__atomic_store_n(&avg_wait, !!loopcnt/* >> 1*/, __ATOMIC_RELAXED);
 						break;
 					}
 
-					/* measure number of failures */
+					/* measure number of failures for reporting */
 					failcnt++;
 					if (!(prevcnt & failcnt)) {
 						prevcnt = failcnt;
@@ -701,28 +714,15 @@ void operation4(struct thread_ctx *ctx)
 					}
 				}
 
-				if (loopcnt > avg_curr)
-					__atomic_compare_exchange_n(&avg_wait, &avg_curr, loopcnt, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
-
 				do {
+					cpu_relax_long();
 					loopcnt++;
-					if ((loopcnt & (loopcnt - 1)) == 0) {
-						//if (!(loopcnt & 1)) {
-						//if (failcnt++ && !(prevcnt & failcnt)) {
-						//if ((failcnt ^ prevcnt) >= failcnt) { // crossed a power-of-two
-						/* most threads will wake up at approximately the same time,
-						 * so let's only update avg_wait on the first one that changes
-						 * it.
-						 */
-						//cpu_relax_long();
-						//cpu_relax_short();
-						//__atomic_compare_exchange_n(&avg_wait, &avg_curr, failcnt, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
-						//prevcnt = failcnt;
-						//faillog++;
-						//break;
+					if (loopcnt > 2*avg_curr) {
+						__atomic_compare_exchange_n(&avg_wait, &avg_curr, loopcnt, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
 					}
-					avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
-				} while (/*avg_curr > 2 &&*/ loopcnt < avg_curr);
+					else if ((loopcnt & 15) == 0)
+						avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
+				} while (loopcnt < avg_curr);
 			}
 
 
