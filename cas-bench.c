@@ -721,7 +721,8 @@ void operation4(struct thread_ctx *ctx)
 			}
 
 			/* wake other threads and give them a chance to pass */
-			__atomic_compare_exchange_n(&avg_wait, &avg_curr, failcnt >> 4, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+			if (avg_curr)
+				__atomic_compare_exchange_n(&avg_wait, &avg_curr, failcnt >> 4, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
 
 			if (faillog >= WAITL0) {
 				faillog -= WAITL0;
