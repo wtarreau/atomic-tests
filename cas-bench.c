@@ -699,8 +699,9 @@ void operation4(struct thread_ctx *ctx)
 					 */
 					do {
 						cpu_relax_smt();
+
 						if (loopcnt > 2*avg_curr) {
-							__atomic_compare_exchange_n(&avg_wait, &avg_curr, loopcnt, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+							avg_curr = __atomic_exchange_n(&avg_wait, loopcnt, __ATOMIC_RELAXED);
 						}
 						else if ((loopcnt & 15) == 0)
 							avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
