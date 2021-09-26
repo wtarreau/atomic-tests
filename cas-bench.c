@@ -692,7 +692,7 @@ void operation4(struct thread_ctx *ctx)
 
 			avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
 			while (1) {
-				if (__builtin_expect(loopcnt || avg_curr, 0)) {
+				if (__builtin_expect(failcnt > 4 || avg_curr > 2, 0)) {
 					/* we know it will happen often but it's on the slow path so
 					 * better keep it marked unlikely so that the code remains out
 					 * of the fast path. It saves 4ns on average.
