@@ -76,6 +76,15 @@ volatile static unsigned long total __attribute__((aligned(64))) = 0;
 #define cpu_relax_long() do { } while (0)
 #endif
 
+/* SMT CPU relaxation, yields the control to the sibling thread, or does
+ * nothing if no SMT available.
+ */
+#if defined(__x86_64__)
+#define cpu_relax_smt() ({ asm volatile("rep;nop\n"); 1; })
+#else
+#define cpu_relax_smt() do { } while (0)
+#endif
+
 /* short CPU relaxation, only avoid using the ALU for a few cycles */
 #if defined(__x86_64__)
 #define cpu_relax_short() ({ asm volatile("xchg %rax,%rdx; xchg %rax,%rdx;xchg %rax,%rdx; xchg %rax,%rdx\n"); 1; })
@@ -684,7 +693,7 @@ void operation4(struct thread_ctx *ctx)
 			avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
 			if (avg_curr) {
 				do {
-					cpu_relax_long();
+					cpu_relax_smt();
 					loopcnt++;
 					if (loopcnt > 2*avg_curr) {
 						__atomic_compare_exchange_n(&avg_wait, &avg_curr, loopcnt, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
@@ -715,7 +724,7 @@ void operation4(struct thread_ctx *ctx)
 				}
 
 				do {
-					cpu_relax_long();
+					cpu_relax_smt();
 					loopcnt++;
 					if (loopcnt > 2*avg_curr) {
 						__atomic_compare_exchange_n(&avg_wait, &avg_curr, loopcnt, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
