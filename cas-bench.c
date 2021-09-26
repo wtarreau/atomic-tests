@@ -692,7 +692,7 @@ void operation4(struct thread_ctx *ctx)
 
 			avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
 			while (1) {
-				if (__builtin_expect(failcnt > 4 || avg_curr > 2, 0)) {
+				if (__builtin_expect(loopcnt++ > 16 || avg_curr > 2, 0)) {
 					/* we know it will happen often but it's on the slow path so
 					 * better keep it marked unlikely so that the code remains out
 					 * of the fast path. It saves 4ns on average.
@@ -700,22 +700,20 @@ void operation4(struct thread_ctx *ctx)
 					do {
 						cpu_relax_smt();
 
-						if ((loopcnt & 31) == 4)
+						if ((loopcnt & 31) == 6)
 							avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
 						else if (loopcnt > 2*avg_curr) {
 							avg_curr = __atomic_exchange_n(&avg_wait, loopcnt, __ATOMIC_RELAXED);
 						}
-					} while (loopcnt++ <= avg_curr);
+					} while (loopcnt++ <= avg_curr + 1);
 				}
-				/* make sure we always enter the block above on next passes */
-				loopcnt++;
 
 				/* perform the atomic op */
 				old = __atomic_load_n(&shared.counter, __ATOMIC_ACQUIRE);
 				if (__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
 					/* wake other threads and give them a chance to pass */
 					if (avg_curr)
-						__atomic_compare_exchange_n(&avg_wait, &avg_curr, loopcnt >> 1, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+						__atomic_compare_exchange_n(&avg_wait, &avg_curr, avg_curr*3/4, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
 					break;
 				}
 
