@@ -326,7 +326,6 @@ void operation0(struct thread_ctx *ctx)
 	unsigned long prev; // prev id
 	unsigned long counter = 0;
 	unsigned long failcnt, prevcnt, faillog, prevlog;
-	int ticket; // <0 = no ticket; 0..65535 = ticket
 
 	old = 0;
 	if (arg_relax == 0) {
@@ -335,8 +334,6 @@ void operation0(struct thread_ctx *ctx)
 			faillog = prevcnt = failcnt = 0;
 			new = counter + tid;
 			counter += 65536;
-
-			ticket = -1; // no ticket
 
 			/* If others have been waiting longer than us, we have
 			 * to let them pass first.
@@ -642,9 +639,9 @@ int main(int argc, char **argv)
 	}
 	done = totf + tots;
 
-	printf("threads:%d  attempt:%llu  success:%llu(%.2f%%)  time(ms):%llu  rate:%lld/s  ns:%lld  hit:%.2f%%, tickets:%u\n",
+	printf("threads:%d  attempt:%llu  success:%llu(%.2f%%)  time(ms):%llu  rate:%lld/s  ns:%lld  hit:%.2f%%\n",
 	       nbthreads, done, tots, (tots * 100.0) / (done?done:1), stop / 1000ULL, tots * 1000000ULL / stop, stop * 1000ULL / (tots?tots:1),
-	       (tots*100.0)/done, tot_tickets);
+	       (tots*100.0)/done);
 
 	/* All the work has ended */
 	exit(0);
