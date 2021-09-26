@@ -690,6 +690,7 @@ void operation4(struct thread_ctx *ctx)
 						break;
 					}
 
+				failed:
 					failcnt++;
 					if (!(prevcnt & failcnt)) {
 						/* most threads will wake up at approximately the same time,
@@ -706,18 +707,7 @@ void operation4(struct thread_ctx *ctx)
 				old = __atomic_load_n(&shared.counter, __ATOMIC_ACQUIRE);
 				if (__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED))
 					break;
-
-				failcnt++;
-				if (!(prevcnt & failcnt)) {
-					/* most threads will wake up at approximately the same time,
-					 * so let's only update avg_wait on the first one that changes
-					 * it.
-					 */
-					__atomic_compare_exchange_n(&avg_wait, &avg_curr, failcnt, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
-					prevcnt = failcnt;
-					faillog++;
-					goto try_again;
-				}
+				goto failed;
 			}
 
 			/* wake other threads and give them a chance to pass */
