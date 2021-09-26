@@ -708,7 +708,7 @@ void operation4(struct thread_ctx *ctx)
 					} while (loopcnt++ <= avg_curr);
 				}
 				/* make sure we always enter the block above on next passes */
-				loopcnt |= 1;
+				loopcnt++;
 
 				/* perform the atomic op */
 				old = __atomic_load_n(&shared.counter, __ATOMIC_ACQUIRE);
