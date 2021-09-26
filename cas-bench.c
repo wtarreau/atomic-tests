@@ -691,47 +691,39 @@ void operation4(struct thread_ctx *ctx)
 			counter += 65536;
 
 			avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
-			if (avg_curr) {
-				do {
-					cpu_relax_smt();
-					loopcnt++;
-					if (loopcnt > 2*avg_curr) {
-						__atomic_compare_exchange_n(&avg_wait, &avg_curr, loopcnt, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
-					}
-					else if ((loopcnt & 15) == 0)
-						avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
-				} while (loopcnt < avg_curr);
-			}
-
 			while (1) {
-				if (loopcnt >= avg_curr) {
-					/* perform the atomic op */
-					old = __atomic_load_n(&shared.counter, __ATOMIC_ACQUIRE);
-					if (__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
-						/* wake other threads and give them a chance to pass */
-						if (avg_curr)
-							__atomic_compare_exchange_n(&avg_wait, &avg_curr, loopcnt >> 1 /*loopcnt - avg_curr*/, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
-						//__atomic_store_n(&avg_wait, !!loopcnt/* >> 1*/, __ATOMIC_RELAXED);
-						break;
-					}
+				if (__builtin_expect(loopcnt || avg_curr, 0)) {
+					/* we know it will happen often but it's on the slow path so
+					 * better keep it marked unlikely so that the code remains out
+					 * of the fast path. It saves 4ns on average.
+					 */
+					do {
+						cpu_relax_smt();
+						if (loopcnt > 2*avg_curr) {
+							__atomic_compare_exchange_n(&avg_wait, &avg_curr, loopcnt, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+						}
+						else if ((loopcnt & 15) == 0)
+							avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
+					} while (loopcnt++ <= avg_curr);
+				}
+				/* make sure we always enter the block above on next passes */
+				loopcnt |= 1;
 
-					/* measure number of failures for reporting */
-					failcnt++;
-					if (!(prevcnt & failcnt)) {
-						prevcnt = failcnt;
-						faillog++;
-					}
+				/* perform the atomic op */
+				old = __atomic_load_n(&shared.counter, __ATOMIC_ACQUIRE);
+				if (__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+					/* wake other threads and give them a chance to pass */
+					if (avg_curr)
+						__atomic_compare_exchange_n(&avg_wait, &avg_curr, loopcnt >> 1, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+					break;
 				}
 
-				do {
-					cpu_relax_smt();
-					loopcnt++;
-					if (loopcnt > 2*avg_curr) {
-						__atomic_compare_exchange_n(&avg_wait, &avg_curr, loopcnt, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
-					}
-					else if ((loopcnt & 15) == 0)
-						avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
-				} while (loopcnt < avg_curr);
+				/* measure number of failures for reporting */
+				failcnt++;
+				if (!(prevcnt & failcnt)) {
+					prevcnt = failcnt;
+					faillog++;
+				}
 			}
 
 
