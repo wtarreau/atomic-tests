@@ -1,0 +1,52 @@
+# VIM3L: S905D3 = 4*Cortex A55 @ 2.2 GHz
+
+$ ./cas-bench-v82a -o 4 -r 0
+Starting 4 threads
+Thread   0: tot_wait       778691, tot_done   11201824 ( 93%), max_wait  13 l2=17770
+Thread   1: tot_wait       729122, tot_done    7467953 ( 91%), max_wait  14 l2=27784
+Thread   2: tot_wait       726699, tot_done    7372660 ( 91%), max_wait  16 l2=27833 l4=1
+Thread   3: tot_wait       781104, tot_done   11031800 ( 93%), max_wait  12 l2=17816
+threads: 4 done: 37074237 time(ms): 1000 rate: 37057561/s ns: 26
+
+$ ./cas-bench-v82a -o 4 -r 1
+Starting 4 threads
+Thread   0: tot_wait       846680, tot_done    7833053 ( 90%), max_wait  18 l2=18808 l4=1
+Thread   1: tot_wait       820246, tot_done    6119568 ( 88%), max_wait  13 l2=27817
+Thread   2: tot_wait       817298, tot_done    6138599 ( 88%), max_wait  15 l2=27858
+Thread   3: tot_wait       846022, tot_done    7793406 ( 90%), max_wait  12 l2=18652
+threads: 4 done: 27884626 time(ms): 1000 rate: 27872362/s ns: 35
+
+$ ./cas-bench-v82a -o 4 -r 2
+Starting 4 threads
+Thread   0: tot_wait       485036, tot_done    2182352 ( 81%), max_wait   7 l2=1110
+Thread   1: tot_wait       475748, tot_done    1959089 ( 80%), max_wait  10 l2=2028
+Thread   2: tot_wait       476772, tot_done    1956900 ( 80%), max_wait  10 l2=2013
+Thread   3: tot_wait       487106, tot_done    2177961 ( 81%), max_wait   7 l2=1072
+threads: 4 done: 8276302 time(ms): 1000 rate: 8272529/s ns: 120
+
+$ lscpu -e
+CPU SOCKET CORE L1d:L1i:L2 ONLINE    MAXMHZ   MINMHZ
+  0      0    0 0:0:0         yes 2208.0000 100.0000
+  1      0    1 1:1:0         yes 2208.0000 100.0000
+  2      0    2 2:2:0         yes 2208.0000 100.0000
+  3      0    3 3:3:0         yes 2208.0000 100.0000
+
+$ lscpu |grep -v ^Vul
+Architecture:                    aarch64
+CPU op-mode(s):                  32-bit, 64-bit
+Byte Order:                      Little Endian
+CPU(s):                          4
+On-line CPU(s) list:             0-3
+Thread(s) per core:              1
+Core(s) per socket:              4
+Socket(s):                       1
+Vendor ID:                       ARM
+Model:                           0
+Model name:                      Cortex-A55
+Stepping:                        r1p0
+Frequency boost:                 enabled
+CPU max MHz:                     2208.0000
+CPU min MHz:                     100.0000
+BogoMIPS:                        48.00
+Flags:                           fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm lrcpc dcpop asimddp
+

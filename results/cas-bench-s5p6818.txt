@@ -1,0 +1,60 @@
+# S5P6818 = 2 clusters of 4 A53 @1.6 GHz.
+
+$ ./cas-bench -o 4 -r 0
+Starting 8 threads
+Thread   0: tot_wait      2744324, tot_done    1024876 ( 27%), max_wait  64 l2=255404 l4=22877 l6=1
+Thread   1: tot_wait      2716172, tot_done     997682 ( 26%), max_wait  62 l2=256510 l4=21277
+Thread   2: tot_wait      2719210, tot_done    1013220 ( 27%), max_wait  67 l2=258859 l4=20730 l6=1
+Thread   3: tot_wait      2752078, tot_done    1049786 ( 27%), max_wait  57 l2=254667 l4=23408
+Thread   4: tot_wait      2744563, tot_done    1027380 ( 27%), max_wait  60 l2=255248 l4=22881
+Thread   5: tot_wait      2717446, tot_done     992500 ( 26%), max_wait  65 l2=256276 l4=21500 l6=1
+Thread   6: tot_wait      2720985, tot_done    1010880 ( 27%), max_wait  71 l2=258230 l4=20819 l6=2
+Thread   7: tot_wait      2745662, tot_done    1050099 ( 27%), max_wait  86 l2=254854 l4=22955 l6=2
+threads: 8 done: 8166423 time(ms): 1004 rate: 8128956/s ns: 123
+
+$ ./cas-bench -o 4 -r 1
+Starting 8 threads
+Thread   0: tot_wait      1734317, tot_done     699352 ( 28%), max_wait  35 l2=177780 l4=1535
+Thread   1: tot_wait      1743302, tot_done     695788 ( 28%), max_wait  34 l2=179388 l4=1622
+Thread   2: tot_wait      1741592, tot_done     694898 ( 28%), max_wait  36 l2=179148 l4=1624
+Thread   3: tot_wait      1737628, tot_done     696341 ( 28%), max_wait  33 l2=178420 l4=1670
+Thread   4: tot_wait      1735520, tot_done     698539 ( 28%), max_wait  36 l2=178259 l4=1600
+Thread   5: tot_wait      1741779, tot_done     694403 ( 28%), max_wait  34 l2=179255 l4=1615
+Thread   6: tot_wait      1741396, tot_done     696743 ( 28%), max_wait  35 l2=178884 l4=1609
+Thread   7: tot_wait      1735696, tot_done     697696 ( 28%), max_wait  49 l2=178165 l4=1599
+threads: 8 done: 5573760 time(ms): 1004 rate: 5548149/s ns: 180
+
+$ ./cas-bench -o 4 -r 2
+Starting 8 threads
+Thread   0: tot_wait      1722877, tot_done     720847 ( 29%), max_wait  34 l2=172777 l4=1528
+Thread   1: tot_wait      1733411, tot_done     717580 ( 29%), max_wait  38 l2=174240 l4=1515
+Thread   2: tot_wait      1730418, tot_done     719162 ( 29%), max_wait  37 l2=173840 l4=1486
+Thread   3: tot_wait      1725232, tot_done     720580 ( 29%), max_wait  29 l2=173890 l4=1442
+Thread   4: tot_wait      1721074, tot_done     722626 ( 29%), max_wait  35 l2=172572 l4=1441
+Thread   5: tot_wait      1731463, tot_done     717839 ( 29%), max_wait  32 l2=173928 l4=1444
+Thread   6: tot_wait      1729196, tot_done     719495 ( 29%), max_wait  34 l2=173703 l4=1471
+Thread   7: tot_wait      1725410, tot_done     721004 ( 29%), max_wait  36 l2=172927 l4=1446
+threads: 8 done: 5759133 time(ms): 1004 rate: 5732933/s ns: 174
+
+$ lscpu -e
+CPU SOCKET CORE ONLINE MAXMHZ    MINMHZ
+0   0      0    yes    1600.0000 400.0000
+1   0      1    yes    1600.0000 400.0000
+2   0      2    yes    1600.0000 400.0000
+3   0      3    yes    1600.0000 400.0000
+4   1      4    yes    1600.0000 400.0000
+5   1      5    yes    1600.0000 400.0000
+6   1      6    yes    1600.0000 400.0000
+7   1      7    yes    1600.0000 400.0000
+
+$ lscpu
+Architecture:          aarch64
+Byte Order:            Little Endian
+CPU(s):                8
+On-line CPU(s) list:   0-7
+Thread(s) per core:    1
+Core(s) per socket:    4
+Socket(s):             2
+CPU max MHz:           1600.0000
+CPU min MHz:           400.0000
+

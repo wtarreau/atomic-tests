@@ -1,0 +1,26 @@
+# S922X = 2*A53 + 4*A73 (armv8.0)
+
+$ taskset -c 2-5 ./cas-bench -o 4 -r 0
+Starting 4 threads
+Thread   0: tot_wait     14436562, tot_done    4423702 ( 23%), max_wait 105 l2=1051797 l4=216013 l6=260
+Thread   1: tot_wait     13574230, tot_done    8294558 ( 37%), max_wait 282 l2=1200603 l4=128234 l6=16 l8=1
+Thread   2: tot_wait     13482527, tot_done   10073777 ( 42%), max_wait  91 l2=1195649 l4=119911 l6=14
+Thread   3: tot_wait     13337148, tot_done   11717162 ( 46%), max_wait 130 l2=1168140 l4=119086 l6=25
+threads: 4 done: 34509199 time(ms): 1000 rate: 34501712/s ns: 28
+
+$ taskset -c 2-5 ./cas-bench -o 4 -r 1
+Starting 4 threads
+Thread   0: tot_wait      7533617, tot_done    5786338 ( 43%), max_wait  26 l2=621425 l4=358
+Thread   1: tot_wait      7532186, tot_done    5907176 ( 43%), max_wait  22 l2=611827 l4=262
+Thread   2: tot_wait      7438601, tot_done    5991938 ( 44%), max_wait  23 l2=591402 l4=215
+Thread   3: tot_wait      7463513, tot_done    6062162 ( 44%), max_wait  29 l2=590635 l4=192
+threads: 4 done: 23747614 time(ms): 1000 rate: 23742414/s ns: 42
+
+$ taskset -c 2-5 ./cas-bench -o 4 -r 2
+Starting 4 threads
+Thread   0: tot_wait      2370719, tot_done    5890659 ( 71%), max_wait  12 l2=99205
+Thread   1: tot_wait      2520828, tot_done    6091211 ( 70%), max_wait  11 l2=76447
+Thread   2: tot_wait      2399108, tot_done    5961018 ( 71%), max_wait  10 l2=83460
+Thread   3: tot_wait      2380745, tot_done    5974653 ( 71%), max_wait  12 l2=80962
+threads: 4 done: 23917541 time(ms): 1000 rate: 23912160/s ns: 41
+

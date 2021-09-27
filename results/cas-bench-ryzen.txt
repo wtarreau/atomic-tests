@@ -1,0 +1,59 @@
+$ /tmp/cas-bench -o 4 -r 0
+Starting 16 threads
+Thread   0: tot_wait      2654572, tot_done     672784 ( 20%), max_wait  66 l2=252539 l4=18240 l6=1
+Thread   1: tot_wait      2642657, tot_done     679702 ( 20%), max_wait  77 l2=253864 l4=17632 l6=1
+Thread   2: tot_wait      2910506, tot_done     286411 (  8%), max_wait 560 l2=88493 l4=44794 l6=6446 l8=45
+Thread   3: tot_wait      2910166, tot_done     289731 (  9%), max_wait 452 l2=88869 l4=44752 l6=6477 l8=52
+Thread   4: tot_wait      2566541, tot_done    1105126 ( 30%), max_wait  67 l2=251649 l4=2025 l6=2
+Thread   5: tot_wait      2559280, tot_done    1108960 ( 30%), max_wait  68 l2=248826 l4=1980 l6=2
+Thread   6: tot_wait      2647113, tot_done     747682 ( 22%), max_wait  51 l2=265669 l4=12416
+Thread   7: tot_wait      2634282, tot_done     756774 ( 22%), max_wait  43 l2=264911 l4=11979
+Thread   8: tot_wait      2646894, tot_done     661354 ( 19%), max_wait  64 l2=250512 l4=18715 l6=1
+Thread   9: tot_wait      2636291, tot_done     670258 ( 20%), max_wait  67 l2=251740 l4=17972 l6=1
+Thread  10: tot_wait      2957730, tot_done     250349 (  7%), max_wait 421 l2=73819 l4=44404 l6=8189 l8=57
+Thread  11: tot_wait      2954439, tot_done     252082 (  7%), max_wait 436 l2=74722 l4=44475 l6=8094 l8=54
+Thread  12: tot_wait      2559556, tot_done    1119530 ( 30%), max_wait  32 l2=250021 l4=1692
+Thread  13: tot_wait      2551607, tot_done    1124467 ( 30%), max_wait  30 l2=247708 l4=1726
+Thread  14: tot_wait      2642395, tot_done     754041 ( 22%), max_wait  49 l2=264813 l4=12054
+Thread  15: tot_wait      2632615, tot_done     761255 ( 22%), max_wait  48 l2=265928 l4=11453
+threads: 16 done: 11240506 time(ms): 1000 rate: 11238168/s ns: 88
+
+$ /tmp/cas-bench -o 4 -r 1
+Thread   0: tot_wait       961892, tot_done    1023252 ( 51%), max_wait  24 l2=64151 l4=105
+Thread   1: tot_wait       964177, tot_done    1023852 ( 51%), max_wait  25 l2=64070 l4=105
+Thread   2: tot_wait      1037065, tot_done     957381 ( 48%), max_wait  45 l2=78230 l4=427
+Thread   3: tot_wait      1041613, tot_done     957217 ( 47%), max_wait  39 l2=79151 l4=437
+Thread   4: tot_wait       976352, tot_done    1056718 ( 51%), max_wait  26 l2=60366 l4=31
+Thread   5: tot_wait       975123, tot_done    1059930 ( 52%), max_wait  21 l2=59031 l4=27
+Thread   6: tot_wait       969547, tot_done    1083588 ( 52%), max_wait  24 l2=59569 l4=114
+Thread   7: tot_wait       970723, tot_done    1084666 ( 52%), max_wait  24 l2=59208 l4=104
+Thread   8: tot_wait       933314, tot_done    1041362 ( 52%), max_wait  25 l2=58366 l4=109
+Thread   9: tot_wait       935753, tot_done    1042447 ( 52%), max_wait  26 l2=58315 l4=90
+Thread  10: tot_wait      1016601, tot_done     969604 ( 48%), max_wait  33 l2=74231 l4=426
+Thread  11: tot_wait      1018192, tot_done     969230 ( 48%), max_wait  35 l2=74587 l4=382
+Thread  12: tot_wait       985680, tot_done    1051810 ( 51%), max_wait  23 l2=61617 l4=34
+Thread  13: tot_wait       983261, tot_done    1054920 ( 51%), max_wait  26 l2=60651 l4=39
+Thread  14: tot_wait      1012888, tot_done    1066244 ( 51%), max_wait  24 l2=66809 l4=117
+Thread  15: tot_wait      1014389, tot_done    1067160 ( 51%), max_wait  25 l2=66631 l4=119
+threads: 16 done: 16509381 time(ms): 1000 rate: 16506096/s ns: 60
+
+$ /tmp/cas-bench -o 4 -r 2
+Starting 16 threads
+Thread   0: tot_wait       711069, tot_done    1362004 ( 65%), max_wait  23 l2=56595 l4=271
+Thread   1: tot_wait       711373, tot_done    1361618 ( 65%), max_wait  25 l2=56673 l4=284
+Thread   2: tot_wait       671546, tot_done    1338302 ( 66%), max_wait  37 l2=48837 l4=1150
+Thread   3: tot_wait       671136, tot_done    1338225 ( 66%), max_wait  31 l2=48399 l4=1121
+Thread   4: tot_wait       644078, tot_done    1397136 ( 68%), max_wait  21 l2=47108 l4=46
+Thread   5: tot_wait       644693, tot_done    1397114 ( 68%), max_wait  20 l2=46912 l4=38
+Thread   6: tot_wait       680541, tot_done    1381190 ( 66%), max_wait  31 l2=52362 l4=279
+Thread   7: tot_wait       681818, tot_done    1380517 ( 66%), max_wait  28 l2=52848 l4=270
+Thread   8: tot_wait       714389, tot_done    1356348 ( 65%), max_wait  28 l2=57234 l4=312
+Thread   9: tot_wait       715515, tot_done    1355692 ( 65%), max_wait  28 l2=57433 l4=301
+Thread  10: tot_wait       674549, tot_done    1333642 ( 66%), max_wait  39 l2=49941 l4=1072
+Thread  11: tot_wait       674582, tot_done    1334048 ( 66%), max_wait  36 l2=50093 l4=972
+Thread  12: tot_wait       645397, tot_done    1395263 ( 68%), max_wait  28 l2=47055 l4=37
+Thread  13: tot_wait       643256, tot_done    1395959 ( 68%), max_wait  21 l2=46480 l4=34
+Thread  14: tot_wait       685402, tot_done    1375734 ( 66%), max_wait  24 l2=53699 l4=306
+Thread  15: tot_wait       684167, tot_done    1375396 ( 66%), max_wait  33 l2=54007 l4=307
+threads: 16 done: 21878188 time(ms): 1000 rate: 21874075/s ns: 45
+
