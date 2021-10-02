@@ -629,7 +629,7 @@ int main(int argc, char **argv)
 		//for (v = 0; v < nbthreads; v++) {
 		//	printf("f:%8u ", runners[u].stats[v].f);
 		//}
-		printf(" ts=%5.1f%%\n", (tots)*100.0/tot);
+		printf(" ts=%5.1f%% (%llu/%llu)\n", (tots)*100.0/tot, tots, tot);
 	}
 
 	done = totf = tots = 0;
