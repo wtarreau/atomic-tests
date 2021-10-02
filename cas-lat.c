@@ -390,6 +390,121 @@ void operation0(struct thread_ctx *ctx)
 			}
 
 		} while (step == 2);
+	} else if (arg_relax == 1) {
+		/* no relax at all */
+		do {
+			faillog = prevcnt = failcnt = 0;
+			new = counter + tid;
+			counter += 65536;
+
+			/* If others have been waiting longer than us, we have
+			 * to let them pass first.
+			 */
+		try_again1:
+			while (1) {
+				prevlog = __atomic_load_n(&queue, __ATOMIC_ACQUIRE);
+				if (!prevlog)
+					break;
+
+				prevcnt = failcnt++;
+				if ((prevcnt & failcnt) == 0) {
+					faillog++;
+					if (faillog >= prevlog) {
+						/* let's get out and try to pass */
+						if (faillog > prevlog/* && faillog >= 8*/)
+							__atomic_store_n(&queue, faillog, __ATOMIC_RELEASE);
+						break;
+					}
+				}
+				//cpu_relax_long();
+				//cpu_relax_short();
+			}
+
+			{
+				old = 0xBADC0FFEE; // just use a value unlikely to match
+				__atomic_compare_exchange_n(&shared.counter, &old, old, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+				/* now <old> contains the previous value and the line was loaded as exclusive */
+			}
+
+			if (!__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+				prev = old & 255;
+				ctx->stats[prev].f++; // failure
+				goto try_again1;
+			}
+
+			/* next one! */
+			if (prevlog)
+				__atomic_store_n(&queue, prevlog / 4, __ATOMIC_RELEASE);
+
+			prev = old & 255;
+			ctx->stats[prev].s++; // success
+
+			/* we consumed our right through the queue, let's release someone else now */
+			//next_one(&queue);
+
+			if (faillog >= WAITL0) {
+				faillog -= WAITL0;
+				ctx->loops[faillog >> 1]++;
+			}
+
+		} while (step == 2);
+	} else if (arg_relax == 2) {
+		/* no relax at all */
+		do {
+			faillog = prevcnt = failcnt = 0;
+			new = counter + tid;
+			counter += 65536;
+
+			/* If others have been waiting longer than us, we have
+			 * to let them pass first.
+			 */
+		try_again2:
+			while (1) {
+				prevlog = __atomic_load_n(&queue, __ATOMIC_ACQUIRE);
+				if (!prevlog)
+					break;
+
+				prevcnt = failcnt++;
+				if ((prevcnt & failcnt) == 0) {
+					faillog++;
+					if (faillog >= prevlog) {
+						/* let's get out and try to pass */
+						if (faillog > prevlog/* && faillog >= 8*/)
+							__atomic_store_n(&queue, faillog, __ATOMIC_RELEASE);
+						break;
+					}
+				}
+				//cpu_relax_long();
+				//cpu_relax_short();
+			}
+
+			{
+				old = __atomic_fetch_add(&shared.counter, 0, __ATOMIC_RELAXED);
+				/* now <old> contains the previous value and the line was loaded as exclusive */
+			}
+
+			if (!__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+				prev = old & 255;
+				ctx->stats[prev].f++; // failure
+				goto try_again1;
+			}
+
+			/* next one! */
+			if (prevlog)
+				__atomic_store_n(&queue, prevlog / 4, __ATOMIC_RELEASE);
+
+			prev = old & 255;
+			ctx->stats[prev].s++; // success
+
+			/* we consumed our right through the queue, let's release someone else now */
+			//next_one(&queue);
+
+			if (faillog >= WAITL0) {
+				faillog -= WAITL0;
+				ctx->loops[faillog >> 1]++;
+			}
+
+		} while (step == 2);
 	}
 
 	ctx->tots = ctx->totf = 0;
