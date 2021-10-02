@@ -797,6 +797,347 @@ void operation4(struct thread_ctx *ctx)
 	ctx->max_wait = max_wait;
 }
 
+/* simple per-thread counter increment using a CAS but with load-exclusive
+ * made of xadd(0), and tickets for congestion.
+ */
+void operation5(struct thread_ctx *ctx)
+{
+	unsigned long tid = ctx->tid; // thread id
+	unsigned long old, new;
+	unsigned long counter;
+	unsigned long failcnt, prevcnt, loopcnt;
+	unsigned long long tot_done, tot_wait, max_wait;
+
+	old = 0;
+	counter = 0;
+	tot_done = tot_wait = max_wait = 0;
+	if (arg_relax == 0) {
+		/* no relax at all */
+		do {
+			int faillog = -1; // faillog=0 for cnt=1
+
+			prevcnt = failcnt = 0;
+			new = counter + tid;
+			counter += 65536;
+
+			while (1) {
+				old = __atomic_fetch_add(&shared.counter, 0, __ATOMIC_RELAXED);
+				if (__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED))
+					break;
+
+				failcnt++;
+				if (!(prevcnt & failcnt)) {
+					prevcnt = failcnt;
+					faillog++;
+				}
+			}
+
+			if (faillog >= WAITL0) {
+				faillog -= WAITL0;
+				ctx->loops[faillog >> 1]++;
+			}
+
+			tot_done++;
+			tot_wait += failcnt;
+			if (failcnt > max_wait)
+				max_wait = failcnt;
+		} while (step == 2);
+	} else if (arg_relax == 1) {
+		/* relax based on avg wait time. Each thread waits at least as
+		 * long as the avg wait time others are experiencing before
+		 * starting to disturb others. On success, the avg waittime is
+		 * lowered.
+		 */
+		do {
+			unsigned long avg_curr;
+			int faillog = -1; // faillog=0 for cnt=1
+
+			prevcnt = failcnt = loopcnt = 0;
+			new = counter + tid;
+			counter += 65536;
+
+			avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
+			while (1) {
+				if (__builtin_expect(loopcnt++ > 16 || avg_curr > 2, 0)) {
+					/* we know it will happen often but it's on the slow path so
+					 * better keep it marked unlikely so that the code remains out
+					 * of the fast path. It saves 4ns on average.
+					 */
+					do {
+						cpu_relax_smt();
+
+						if ((loopcnt & 31) == 6)
+							avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
+						else if (loopcnt > 2*avg_curr) {
+							avg_curr = __atomic_exchange_n(&avg_wait, loopcnt, __ATOMIC_RELAXED);
+						}
+					} while (loopcnt++ <= avg_curr + 1);
+				}
+
+				/* perform the atomic op */
+				old = __atomic_fetch_add(&shared.counter, 0, __ATOMIC_RELAXED);
+				if (__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+					/* wake other threads and give them a chance to pass */
+					if (avg_curr)
+						__atomic_compare_exchange_n(&avg_wait, &avg_curr, avg_curr*3/4, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+					break;
+				}
+
+				/* measure number of failures for reporting */
+				failcnt++;
+				if (!(prevcnt & failcnt)) {
+					prevcnt = failcnt;
+					faillog++;
+				}
+			}
+
+
+			if (faillog >= WAITL0) {
+				faillog -= WAITL0;
+				ctx->loops[faillog >> 1]++;
+			}
+
+			tot_done++;
+			tot_wait += failcnt;
+			if (failcnt > max_wait)
+				max_wait = failcnt;
+		} while (step == 2);
+	} else if (arg_relax == 2) {
+		/* relax based on avg wait time. Each thread waits at least as
+		 * long as the avg wait time others are experiencing before
+		 * starting to disturb others. On success, the avg waittime is
+		 * lowered.
+		 */
+		do {
+			unsigned long avg_curr;
+			int faillog = -1; // faillog=0 for cnt=1
+
+			prevcnt = failcnt = loopcnt = 0;
+			new = counter + tid;
+			counter += 65536;
+
+			avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
+			while (1) {
+				if (1) {
+					do {
+						if ((loopcnt & 31) == 16)
+							avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
+						else if (loopcnt > 2*avg_curr)
+							avg_curr = __atomic_exchange_n(&avg_wait, loopcnt, __ATOMIC_RELAXED);
+						else
+							cpu_relax_smt();
+					} while (loopcnt++ <= avg_curr + 1);
+				}
+
+				/* perform the atomic op */
+				old = __atomic_fetch_add(&shared.counter, 0, __ATOMIC_RELAXED);
+				if (__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+					/* wake other threads and give them a chance to pass */
+					if (avg_curr)
+						__atomic_compare_exchange_n(&avg_wait, &avg_curr, loopcnt*14/16, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+					break;
+				}
+
+				/* measure number of failures for reporting */
+				failcnt++;
+				if (!(prevcnt & failcnt)) {
+					prevcnt = failcnt;
+					faillog++;
+				}
+			}
+
+
+			if (faillog >= WAITL0) {
+				faillog -= WAITL0;
+				ctx->loops[faillog >> 1]++;
+			}
+
+			tot_done++;
+			tot_wait += failcnt;
+			if (failcnt > max_wait)
+				max_wait = failcnt;
+		} while (step == 2);
+	}
+	ctx->tot_done = tot_done;
+	ctx->tot_wait = tot_wait;
+	ctx->max_wait = max_wait;
+}
+
+/* simple per-thread counter increment using a CAS but with load-exclusive
+ * made of a failed cmpxchg, and tickets for congestion.
+ */
+void operation6(struct thread_ctx *ctx)
+{
+	unsigned long tid = ctx->tid; // thread id
+	unsigned long old, new;
+	unsigned long counter;
+	unsigned long failcnt, prevcnt, loopcnt;
+	unsigned long long tot_done, tot_wait, max_wait;
+
+	old = 0;
+	counter = 0;
+	tot_done = tot_wait = max_wait = 0;
+	if (arg_relax == 0) {
+		/* no relax at all */
+		do {
+			int faillog = -1; // faillog=0 for cnt=1
+
+			prevcnt = failcnt = 0;
+			new = counter + tid;
+			counter += 65536;
+
+			while (1) {
+				old = 0xBADC0FFEE; // just use a value unlikely to match
+				__atomic_compare_exchange_n(&shared.counter, &old, old, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+				/* now <old> contains the previous value and the line was loaded as exclusive */
+
+				if (__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED))
+					break;
+
+				failcnt++;
+				if (!(prevcnt & failcnt)) {
+					prevcnt = failcnt;
+					faillog++;
+				}
+			}
+
+			if (faillog >= WAITL0) {
+				faillog -= WAITL0;
+				ctx->loops[faillog >> 1]++;
+			}
+
+			tot_done++;
+			tot_wait += failcnt;
+			if (failcnt > max_wait)
+				max_wait = failcnt;
+		} while (step == 2);
+	} else if (arg_relax == 1) {
+		/* relax based on avg wait time. Each thread waits at least as
+		 * long as the avg wait time others are experiencing before
+		 * starting to disturb others. On success, the avg waittime is
+		 * lowered.
+		 */
+		do {
+			unsigned long avg_curr;
+			int faillog = -1; // faillog=0 for cnt=1
+
+			prevcnt = failcnt = loopcnt = 0;
+			new = counter + tid;
+			counter += 65536;
+
+			avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
+			while (1) {
+				if (__builtin_expect(loopcnt++ > 16 || avg_curr > 2, 0)) {
+					/* we know it will happen often but it's on the slow path so
+					 * better keep it marked unlikely so that the code remains out
+					 * of the fast path. It saves 4ns on average.
+					 */
+					do {
+						cpu_relax_smt();
+
+						if ((loopcnt & 31) == 6)
+							avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
+						else if (loopcnt > 2*avg_curr) {
+							avg_curr = __atomic_exchange_n(&avg_wait, loopcnt, __ATOMIC_RELAXED);
+						}
+					} while (loopcnt++ <= avg_curr + 1);
+				}
+
+				/* perform the atomic op */
+				old = 0xBADC0FFEE; // just use a value unlikely to match
+				__atomic_compare_exchange_n(&shared.counter, &old, old, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+				/* now <old> contains the previous value and the line was loaded as exclusive */
+
+				if (__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+					/* wake other threads and give them a chance to pass */
+					if (avg_curr)
+						__atomic_compare_exchange_n(&avg_wait, &avg_curr, avg_curr*3/4, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+					break;
+				}
+
+				/* measure number of failures for reporting */
+				failcnt++;
+				if (!(prevcnt & failcnt)) {
+					prevcnt = failcnt;
+					faillog++;
+				}
+			}
+
+
+			if (faillog >= WAITL0) {
+				faillog -= WAITL0;
+				ctx->loops[faillog >> 1]++;
+			}
+
+			tot_done++;
+			tot_wait += failcnt;
+			if (failcnt > max_wait)
+				max_wait = failcnt;
+		} while (step == 2);
+	} else if (arg_relax == 2) {
+		/* relax based on avg wait time. Each thread waits at least as
+		 * long as the avg wait time others are experiencing before
+		 * starting to disturb others. On success, the avg waittime is
+		 * lowered.
+		 */
+		do {
+			unsigned long avg_curr;
+			int faillog = -1; // faillog=0 for cnt=1
+
+			prevcnt = failcnt = loopcnt = 0;
+			new = counter + tid;
+			counter += 65536;
+
+			avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
+			while (1) {
+				if (1) {
+					do {
+						if ((loopcnt & 31) == 16)
+							avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
+						else if (loopcnt > 2*avg_curr)
+							avg_curr = __atomic_exchange_n(&avg_wait, loopcnt, __ATOMIC_RELAXED);
+						else
+							cpu_relax_smt();
+					} while (loopcnt++ <= avg_curr + 1);
+				}
+
+				/* perform the atomic op */
+				old = 0xBADC0FFEE; // just use a value unlikely to match
+				__atomic_compare_exchange_n(&shared.counter, &old, old, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+				/* now <old> contains the previous value and the line was loaded as exclusive */
+
+				if (__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+					/* wake other threads and give them a chance to pass */
+					if (avg_curr)
+						__atomic_compare_exchange_n(&avg_wait, &avg_curr, loopcnt*14/16, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+					break;
+				}
+
+				/* measure number of failures for reporting */
+				failcnt++;
+				if (!(prevcnt & failcnt)) {
+					prevcnt = failcnt;
+					faillog++;
+				}
+			}
+
+
+			if (faillog >= WAITL0) {
+				faillog -= WAITL0;
+				ctx->loops[faillog >> 1]++;
+			}
+
+			tot_done++;
+			tot_wait += failcnt;
+			if (failcnt > max_wait)
+				max_wait = failcnt;
+		} while (step == 2);
+	}
+	ctx->tot_done = tot_done;
+	ctx->tot_wait = tot_wait;
+	ctx->max_wait = max_wait;
+}
+
 void run(void *arg)
 {
 	const int tid = (long)arg;
@@ -825,6 +1166,10 @@ void run(void *arg)
 		operation3(&runners[tid]);
 	else if (arg_op == 4)
 		operation4(&runners[tid]);
+	else if (arg_op == 5)
+		operation5(&runners[tid]);
+	else if (arg_op == 6)
+		operation6(&runners[tid]);
 	else
 		do { } while (step == 2);
 
