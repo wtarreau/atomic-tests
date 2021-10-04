@@ -632,6 +632,7 @@ void operation3(struct thread_ctx *ctx)
 }
 
 static unsigned int avg_wait __attribute__((aligned(64)));
+static volatile unsigned int wait_line __attribute__((aligned(64)));
 
 /* simple per-thread counter increment using a CAS, and tickets for congestion. */
 void operation4(struct thread_ctx *ctx)
@@ -810,6 +811,64 @@ void operation4(struct thread_ctx *ctx)
 					 */
 					if (avg_curr)
 						__atomic_compare_exchange_n(&avg_wait, &avg_curr, loopcnt*12/16, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+					break;
+				}
+
+				/* measure number of failures for reporting */
+				failcnt++;
+				if (!(prevcnt & failcnt)) {
+					prevcnt = failcnt;
+					faillog++;
+				}
+			}
+
+
+			if (faillog >= WAITL0) {
+				faillog -= WAITL0;
+				ctx->loops[faillog >> 1]++;
+			}
+
+			tot_done++;
+			tot_wait += failcnt;
+			if (failcnt > max_wait)
+				max_wait = failcnt;
+		} while (step == 2);
+	} else if (arg_relax == 3) {
+		/* relax based on avg wait time. Each thread waits at least as
+		 * long as the avg wait time others are experiencing before
+		 * starting to disturb others. On success, the avg waittime is
+		 * lowered.
+		 */
+		do {
+			unsigned long avg_curr;
+			int faillog = -1; // faillog=0 for cnt=1
+
+			prevcnt = failcnt = loopcnt = 0;
+			new = counter + tid;
+			counter += 65536;
+
+			avg_curr = 1; // immediate read first
+			while (1) {
+				if (1) {
+					do {
+						if (loopcnt >= 2*avg_curr) {
+							__atomic_compare_exchange_n(&avg_wait, &avg_curr, loopcnt, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+						}
+						else if ((loopcnt & 31) == 0) {
+							avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
+						}
+						else
+							//cpu_relax_long();
+							cpu_relax_smt();
+
+					} while (loopcnt++ <= avg_curr + 1);
+				}
+
+				/* perform the atomic op */
+				old = __atomic_load_n(&shared.counter, __ATOMIC_ACQUIRE);
+				if (__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+					if (avg_curr)
+						__atomic_compare_exchange_n(&avg_wait, &avg_curr, (loopcnt+1)*5/8, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
 					break;
 				}
 
