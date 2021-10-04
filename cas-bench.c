@@ -847,20 +847,20 @@ void operation4(struct thread_ctx *ctx)
 			new = counter + tid;
 			counter += 65536;
 
-			avg_curr = 1; // immediate read first
+			avg_curr = 0;//__atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
 			while (1) {
-				if (1) {
+				if (avg_curr || failcnt > 2) {
 					do {
 						if (loopcnt >= 2*avg_curr) {
 							__atomic_compare_exchange_n(&avg_wait, &avg_curr, loopcnt, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
 						}
-						else if ((loopcnt & 31) == 0) {
+						else if ((loopcnt & 127) == 0) {
 							avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
 						}
-						else
+						else {
 							//cpu_relax_long();
 							cpu_relax_smt();
-
+						}
 					} while (loopcnt++ <= avg_curr + 1);
 				}
 
