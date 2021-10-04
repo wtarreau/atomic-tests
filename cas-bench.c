@@ -753,10 +753,41 @@ void operation4(struct thread_ctx *ctx)
 			avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
 			while (1) {
 				if (1) {
+					/* Measured values: for loopcnt*9/16 on finish:
+					 *  loopcnt         Ryzen                   i7
+					 *  >=48/16   74ns,maxw~60,l4~10000   68ns,maxw~13,l2~85k
+					 *  >=40/16   73ns,maxw~40,l4~3000    69ns,maxw~15,l2~70k
+					 *  >=32/16   74ns,maxw~35,l4~3000    71ns,maxw~13,l2~45k
+					 *  >=24/16   70ns,maxw~29,l4~500     82ns,maxw~10,l2~11k
+					 *
+					 * Measured values: for loopcnt*5/8 on finish:
+					 *  loopcnt         Ryzen                   i7
+					 *   >32/16:  74ns,maxw~35,l4~4000    68ns,maxw~12,l2~40k
+					 *  >=32/16:  74ns,maxw~35,l4~4000    69ns,maxw~12,l2~40k
+					 *  >=24/16:  69ns,maxw~30,l4~1000    81ns,maxw~10,l2~10k
+					 *   >20/16:  67ns,maxw~23,l4~300     89ns,maxw~8,l2~4000
+					 *  >=21/16:  67ns,maxw~24,l4~80      90ns,maxw~8,l2~3300
+					 *  >=20/16:  68ns,maxw~21,l4~40      94ns,maxw~7,l2~1500
+					 *  >=19/16:  67ns,maxw~18,l4~10     107ns,maxw~6,l2~600
+					 *  >=18/16   71ns,maxw~15,l4~2      148ns,maxw~5,l2~45
+					 *  >=17/16:  99ns,maxw~12,l2~10k    234ns,maxw~4,l2~1
+					 *  >=33/32  133ns,maxw~8,l2~1300    423ns,maxw~3,l2~0.4
+					 *
+					 * Measured values for loopcnt*7/8 on finish:
+					 *  loopcnt         Ryzen                   i7
+					 *   >32/16:  47ns,maxw~28,l4~1400   128ns,maxw~5,l2~30
+					 *  >=32/16:  47ns,maxw~27,l4~1200   128ns,maxw~6,l2~35
+					 *  >=24/16:  51ns,maxw~27,l4~100    128ns,maxw~6,l2~25
+					 *  >=21/16:  50ns,maxw~24,l4~60     128ns,maxw~5,l2~22
+					 *  >=20/16:  49ns,maxw~20,l4~10     128ns,maxw~5,l2~15
+					 *  >=19/16:  53ns,maxw~17,l4~5      142ns,maxw~6,l2~350 <- big change for i7
+					 *  >=18/16   57ns,maxw~14,l2~15k    185ns,maxw~6,l2~250
+					 *  >=17/16:  82ns,maxw~11,l2~6.8k   271ns,maxw~4,l2~7
+					 */
 					do {
-						if ((loopcnt & 31) == 16)
+						if ((loopcnt & 31) == 16) // even faster with &15==8
 							avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
-						else if (loopcnt > 2*avg_curr)
+						else if (loopcnt >= 3*avg_curr/2)
 							avg_curr = __atomic_exchange_n(&avg_wait, loopcnt, __ATOMIC_RELAXED);
 						else
 							cpu_relax_smt();
@@ -766,9 +797,19 @@ void operation4(struct thread_ctx *ctx)
 				/* perform the atomic op */
 				old = __atomic_load_n(&shared.counter, __ATOMIC_ACQUIRE);
 				if (__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
-					/* wake other threads and give them a chance to pass */
+					/* wake other threads and give them a chance to pass
+					 *
+					 * Measures for >4/5 above:
+					 *  loopcnt          Ryzen                   i7
+					 *   *15/16     68ns,maxw~22,l4~25     249ns,maxw~6,l2~150
+					 *   *14/16     52ns,maxw~25,l4~40     128ns,maxw~5,l2~80
+					 *   *13/16     54ns,maxw~22,l4~120     94ns,maxw~6,l2~780
+					 *   *12/16     58ns,maxw~20,l4~150     92ns,maxw~7,l2~2300
+					 *   *11/16     63ns,maxw~20,l4~200     91ns,maxw~7,l2~3300
+					 *   *10/16     67ns,maxw~23,l4~300     89ns,maxw~8,l2~4000
+					 */
 					if (avg_curr)
-						__atomic_compare_exchange_n(&avg_wait, &avg_curr, loopcnt*14/16, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+						__atomic_compare_exchange_n(&avg_wait, &avg_curr, loopcnt*12/16, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
 					break;
 				}
 
