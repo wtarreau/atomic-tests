@@ -1,0 +1,110 @@
+# LX2160A - 16*A72 @ 2.0 GHz (ARMv8.0)
+
+$ ./cas-bench -o 4 -r 0
+Starting 16 threads
+Thread   0: tot_wait      1722584, tot_done     712487 ( 29%), max_wait 327 l2=18041 l4=28564 l6=6535 l8=16
+Thread   1: tot_wait      1984881, tot_done     371545 ( 15%), max_wait 625 l2=9842 l4=20509 l6=10507 l8=193
+Thread   2: tot_wait      1786206, tot_done     540577 ( 23%), max_wait 440 l2=11407 l4=21960 l6=8726 l8=75
+Thread   3: tot_wait      1870525, tot_done     418989 ( 18%), max_wait 447 l2=12265 l4=24602 l6=8866 l8=68
+Thread   4: tot_wait      1788344, tot_done     669249 ( 27%), max_wait 467 l2=11114 l4=20862 l6=9018 l8=105
+Thread   5: tot_wait      1944478, tot_done     459158 ( 19%), max_wait 525 l2=10555 l4=22697 l6=9736 l8=140
+Thread   6: tot_wait      1761573, tot_done     819819 ( 31%), max_wait 432 l2=12799 l4=25012 l6=7976 l8=41
+Thread   7: tot_wait      2046380, tot_done     452123 ( 18%), max_wait 772 l2=7458 l4=16904 l6=10628 l8=503
+Thread   8: tot_wait      1821612, tot_done     533472 ( 22%), max_wait 466 l2=12570 l4=21150 l6=9104 l8=96
+Thread   9: tot_wait      1859501, tot_done     481760 ( 20%), max_wait 346 l2=17199 l4=29020 l6=7716 l8=16
+Thread  10: tot_wait      1856962, tot_done     594131 ( 24%), max_wait 607 l2=7706 l4=15937 l6=10106 l8=286
+Thread  11: tot_wait      1887425, tot_done     539813 ( 22%), max_wait 461 l2=14141 l4=27296 l6=8181 l8=88
+Thread  12: tot_wait      1919492, tot_done     320515 ( 14%), max_wait 716 l2=4951 l4=9520 l6=9901 l8=902
+Thread  13: tot_wait      1716000, tot_done     562362 ( 24%), max_wait 315 l2=22083 l4=34456 l6=4854 l8=2
+Thread  14: tot_wait      1788745, tot_done     837167 ( 31%), max_wait 418 l2=11716 l4=22869 l6=8623 l8=77
+Thread  15: tot_wait      2050278, tot_done     495871 ( 19%), max_wait 567 l2=9545 l4=19419 l6=10450 l8=399
+threads: 16 done: 8809038 time(ms): 1000 rate: 8801055/s ns: 113
+
+$ ./cas-bench -o 4 -r 1
+Starting 16 threads
+Thread   0: tot_wait      1437252, tot_done     219986 ( 13%), max_wait 100 l2=100240 l4=23817 l6=64
+Thread   1: tot_wait      1432903, tot_done     220322 ( 13%), max_wait  87 l2=100416 l4=23725 l6=45
+Thread   2: tot_wait      1420396, tot_done     228633 ( 13%), max_wait  88 l2=107864 l4=21463 l6=38
+Thread   3: tot_wait      1443188, tot_done     224985 ( 13%), max_wait  85 l2=106760 l4=22243 l6=43
+Thread   4: tot_wait      1439412, tot_done     216910 ( 13%), max_wait  97 l2=101909 l4=23573 l6=45
+Thread   5: tot_wait      1424003, tot_done     218858 ( 13%), max_wait  95 l2=102456 l4=23127 l6=50
+Thread   6: tot_wait      1435596, tot_done     213124 ( 12%), max_wait  97 l2=98530 l4=24317 l6=74
+Thread   7: tot_wait      1431901, tot_done     213555 ( 12%), max_wait  87 l2=98725 l4=24251 l6=77
+Thread   8: tot_wait      1427436, tot_done     223301 ( 13%), max_wait 102 l2=103028 l4=22822 l6=45
+Thread   9: tot_wait      1433939, tot_done     221827 ( 13%), max_wait  91 l2=102662 l4=23126 l6=48
+Thread  10: tot_wait      1437877, tot_done     213111 ( 12%), max_wait  92 l2=98309 l4=24362 l6=71
+Thread  11: tot_wait      1430826, tot_done     213963 ( 13%), max_wait  89 l2=98488 l4=24247 l6=73
+Thread  12: tot_wait      1432573, tot_done     225206 ( 13%), max_wait 109 l2=103683 l4=22705 l6=48
+Thread  13: tot_wait      1439229, tot_done     224103 ( 13%), max_wait 125 l2=103731 l4=22987 l6=44
+Thread  14: tot_wait      1433477, tot_done     216438 ( 13%), max_wait  85 l2=98447 l4=24282 l6=79
+Thread  15: tot_wait      1430074, tot_done     216907 ( 13%), max_wait  88 l2=98676 l4=24190 l6=73
+threads: 16 done: 3511229 time(ms): 1000 rate: 3508348/s ns: 285
+
+$ ./cas-bench -o 4 -r 2
+Starting 16 threads
+Thread   0: tot_wait      1482737, tot_done     225727 ( 13%), max_wait 109 l2=82226 l4=28365 l6=171
+Thread   1: tot_wait      1489221, tot_done     225345 ( 13%), max_wait 110 l2=82045 l4=28750 l6=164
+Thread   2: tot_wait      1491413, tot_done     207699 ( 12%), max_wait 118 l2=73894 l4=30659 l6=274
+Thread   3: tot_wait      1487509, tot_done     207622 ( 12%), max_wait 109 l2=73948 l4=30520 l6=264
+Thread   4: tot_wait      1494982, tot_done     215001 ( 12%), max_wait 129 l2=73450 l4=30367 l6=335
+Thread   5: tot_wait      1486307, tot_done     216158 ( 12%), max_wait 127 l2=74229 l4=30067 l6=332
+Thread   6: tot_wait      1483367, tot_done     216401 ( 12%), max_wait 107 l2=75424 l4=29922 l6=269
+Thread   7: tot_wait      1497464, tot_done     214806 ( 12%), max_wait 106 l2=75215 l4=30296 l6=282
+Thread   8: tot_wait      1485451, tot_done     224619 ( 13%), max_wait 107 l2=80969 l4=28735 l6=197
+Thread   9: tot_wait      1489911, tot_done     224133 ( 13%), max_wait 103 l2=80456 l4=29047 l6=196
+Thread  10: tot_wait      1491851, tot_done     208236 ( 12%), max_wait 120 l2=70798 l4=30998 l6=345
+Thread  11: tot_wait      1496197, tot_done     207460 ( 12%), max_wait 123 l2=70795 l4=31141 l6=341
+Thread  12: tot_wait      1479866, tot_done     221754 ( 13%), max_wait 140 l2=78995 l4=29135 l6=202
+Thread  13: tot_wait      1489732, tot_done     220645 ( 12%), max_wait 136 l2=78798 l4=29380 l6=217
+Thread  14: tot_wait      1488028, tot_done     216881 ( 12%), max_wait 115 l2=76316 l4=30032 l6=239
+Thread  15: tot_wait      1495689, tot_done     216212 ( 12%), max_wait 119 l2=76196 l4=30181 l6=253
+threads: 16 done: 3468699 time(ms): 1000 rate: 3465600/s ns: 288
+
+$ lscpu
+Architecture:                    aarch64
+CPU op-mode(s):                  32-bit, 64-bit
+Byte Order:                      Little Endian
+CPU(s):                          16
+On-line CPU(s) list:             0-15
+Thread(s) per core:              1
+Core(s) per socket:              16
+Socket(s):                       1
+Vendor ID:                       ARM
+Model:                           3
+Model name:                      Cortex-A72
+Stepping:                        r0p3
+BogoMIPS:                        50.00
+L1d cache:                       512 KiB
+L1i cache:                       768 KiB
+L2 cache:                        8 MiB
+L3 cache:                        8 MiB
+Vulnerability Itlb multihit:     Not affected
+Vulnerability L1tf:              Not affected
+Vulnerability Mds:               Not affected
+Vulnerability Meltdown:          Not affected
+Vulnerability Spec store bypass: Not affected
+Vulnerability Spectre v1:        Mitigation; __user pointer sanitization
+Vulnerability Spectre v2:        Mitigation; Branch predictor hardening
+Vulnerability Srbds:             Not affected
+Vulnerability Tsx async abort:   Not affected
+Flags:                           fp asimd evtstrm aes pmull sha1 sha2 crc32 cpuid
+
+$ lscpu -e
+CPU SOCKET CORE L1d:L1i:L2:L3 ONLINE
+  0      0    0 0:0:0:0          yes
+  1      0    1 1:1:0:0          yes
+  2      0    2 2:2:1:0          yes
+  3      0    3 3:3:1:0          yes
+  4      0    4 4:4:2:0          yes
+  5      0    5 5:5:2:0          yes
+  6      0    6 6:6:3:0          yes
+  7      0    7 7:7:3:0          yes
+  8      0    8 8:8:4:0          yes
+  9      0    9 9:9:4:0          yes
+ 10      0   10 10:10:5:0        yes
+ 11      0   11 11:11:5:0        yes
+ 12      0   12 12:12:6:0        yes
+ 13      0   13 13:13:6:0        yes
+ 14      0   14 14:14:7:0        yes
+ 15      0   15 15:15:7:0        yes
+
