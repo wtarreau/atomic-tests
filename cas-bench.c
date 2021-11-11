@@ -849,21 +849,6 @@ void operation4(struct thread_ctx *ctx)
 
 			avg_curr = 0;//__atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
 			while (1) {
-				if (avg_curr || failcnt > 2) {
-					do {
-						if (loopcnt >= 2*avg_curr) {
-							__atomic_compare_exchange_n(&avg_wait, &avg_curr, loopcnt, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
-						}
-						else if ((loopcnt & 127) == 0) {
-							avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
-						}
-						else {
-							//cpu_relax_long();
-							cpu_relax_smt();
-						}
-					} while (loopcnt++ <= avg_curr + 1);
-				}
-
 				/* perform the atomic op */
 				old = __atomic_load_n(&shared.counter, __ATOMIC_ACQUIRE);
 				if (__atomic_compare_exchange_n(&shared.counter, &old, new, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
@@ -877,6 +862,35 @@ void operation4(struct thread_ctx *ctx)
 				if (!(prevcnt & failcnt)) {
 					prevcnt = failcnt;
 					faillog++;
+				}
+
+				if (failcnt > 0) {
+					/* much faster on i7, slower on ryzen, faster on armada but extremely unfair */
+					avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
+					do {
+						/* not beautiful but much faster on all machines, including armada,
+						 * with a huge unfairness there. It goes down from 110 to 14 ns avg
+						 * on i7 with 1/10 of the l4 values, unchanged time on ryzen with
+						 * l4/100 and no more l6 nor l8.
+						 */
+						if (loopcnt >= 9*avg_curr/8) {
+							unsigned long old_avg = avg_curr;
+							__atomic_compare_exchange_n(&avg_wait, &avg_curr, loopcnt, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+							if (avg_curr < old_avg)
+								break;
+						}
+						else if ((loopcnt & 127) == 0) {
+							unsigned long old_avg = avg_curr;
+							avg_curr = __atomic_load_n(&avg_wait, __ATOMIC_ACQUIRE);
+							if (avg_curr < old_avg)
+								break;
+						}
+						else {
+							//cpu_relax_long();
+							cpu_relax_smt();
+						}
+						loopcnt++;
+					} while (loopcnt < avg_curr);
 				}
 			}
 
