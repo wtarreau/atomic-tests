@@ -25,6 +25,9 @@ do_graph armada-8040-op3.raw 4 "Armada 8040 R/W"
 do_graph lx2-op2.raw 16 "LX2160A R/O"
 do_graph lx2-op3.raw 16 "LX2160A R/W"
 
+do_graph rk3588-op2.raw 8 "RK3588 R/O"
+do_graph rk3588-op3.raw 8 "RK3588 R/W"
+
 for i in 0 $(seq 0 $(((SCALE+9)/10))); do
         echo -n "$((i*10)) "
 done | ../graph-lat.sh ${SCALE} $(((SCALE+9/10)+1)) "Scale R/O" > all2.html
@@ -33,7 +36,7 @@ for i in 0 $(seq 0 $(((SCALE+9)/10))); do
         echo -n "$((i*10)) "
 done | ../graph-lat.sh ${SCALE} $(((SCALE+9/10)+1)) "Scale R/W" > all3.html
 
-names=(epyc ryzen xeon i7-8650U armada-8040 lx2)
+names=(epyc ryzen xeon i7-8650U armada-8040 lx2 rk3588)
 
 for i in ${names[@]}; do
         cat $i-op2.html >> all2.html
